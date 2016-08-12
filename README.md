@@ -61,3 +61,10 @@ There is an option to make a preprocessing of images: grayscale + rescale + 4-fr
 ## TO DO:
 - **Deep exploration via Bootstraped DQN**
 - **Dueling Architecture**
+
+## Dependencies:
+- **Numpy**
+- **Keras**
+- **Theano**
+- **Gym**
+- **Scipy**
