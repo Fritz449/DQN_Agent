@@ -2,7 +2,7 @@ from scipy.misc import imresize
 
 import gym
 import numpy as np
-
+import time
 import Agent_DQN as AI
 
 ENV_NAME = 'CartPole-v0'
@@ -19,20 +19,14 @@ if ATARI:
     state_shape = (4, 84, 84)
 else:
     state_shape = state_dim
-agent = AI.GameAgent(state_shape, action_dim, gamma=0.99, buffer_max_size=50000, save_name=ENV_NAME,
-                     PRIORITIZED_XP_REPLAY=True, DOUBLE_NETWORK=True, backup_steps=3000)
+agent = AI.GameAgent(state_shape, action_dim, gamma=0.99, buffer_max_size=10000, save_name=ENV_NAME,
+                     PRIORITIZED_XP_REPLAY=True, DOUBLE_NETWORK=True, backup_steps=3000,debug_steps=2500)
 
 EPISODES_TO_TEST = 1
 GAMES_LIMIT = 100000
-import time
-
-hsh = np.random.randint(0, 10, size=(4, 84, 84))
 
 
-def ghash(state):
-    return np.sum(state / 100. * hsh)
-
-
+# Preprocessing for atari
 def atari_prep(img):
     # print img
     r = img[:, :, 0]
@@ -44,6 +38,7 @@ def atari_prep(img):
     return (gray / 256.).reshape(1, 84, 84).astype('float32')
 
 
+# Make next 4-images concatenation by shifting old images
 def next_buf(buffer, gray):
     buf = buffer
     buf[0, :, :] = buf[1, :, :]
@@ -54,11 +49,12 @@ def next_buf(buffer, gray):
 
 
 for episode in xrange(GAMES_LIMIT):
-    # initialize task
+    # Test every 30 episodes
     if episode % 30 == 0 and episode > 0:
         total_reward = 0
         for i in xrange(EPISODES_TO_TEST):
             state = env.reset()
+
             if ATARI:
                 this_buf = np.zeros((4, 84, 84))
                 this_buf = next_buf(this_buf, atari_prep(state))
@@ -71,24 +67,28 @@ for episode in xrange(GAMES_LIMIT):
                     action = agent.greedy_action([state])
                 next_state, reward, done, _ = env.step(action)
                 state = next_state
+
                 if ATARI:
                     this_buf = next_buf(this_buf, atari_prep(next_state))
+
                 total_reward += reward
                 time.sleep(0.0001)
                 if done:
                     break
         ave_reward = total_reward / EPISODES_TO_TEST
-        print 'episode: ', episode, 'Evaluation Average Reward:', ave_reward
+        print 'episode: ', episode, 'Average Reward:', ave_reward
 
     state = env.reset()
+
     if ATARI:
         this_buf = np.zeros((4, 84, 84))
         this_buf = next_buf(this_buf, atari_prep(state))
+
     # Train
     total_reward = 0
     index = 0
-    if episode % 50 == 0:
-        print episode
+    if episode % 10 == 0:
+        print "Now agent plays episode number " + str(episode)
     while True:
         if ATARI:
             if episode % 2 == 0:
@@ -102,12 +102,10 @@ for episode in xrange(GAMES_LIMIT):
                 action = agent.e_greedy_action([state])  # e-greedy action for train
 
         next_state, reward, done, info = env.step(action)
-        if agent.buffer_size % 1000 == 1:
-            print agent.buffer_size
-
-        # if index >= 4:
+        # if agent.buffer_size % 1000 == 1:
+        #     print agent.buffer_size
         if ATARI:
-            if index >= 4:
+            if index >= 3:  # Because this_buf contains last 4 frames
                 agent.memorize(np.copy(this_buf), action, float(reward), done)
             this_buf = next_buf(this_buf, atari_prep(next_state))
         else:
@@ -118,5 +116,4 @@ for episode in xrange(GAMES_LIMIT):
         index += 1
         if done:
             break
-    print total_reward
-    # Test every 100 episodes
+    # print total_reward
