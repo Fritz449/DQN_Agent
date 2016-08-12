@@ -20,8 +20,7 @@ if ATARI:
 else:
     state_shape = state_dim
 agent = AI.GameAgent(state_shape, action_dim, gamma=0.99, buffer_max_size=50000, save_name=ENV_NAME,
-                     FREEZE_WEIGHTS=True, PRIORITIZED_XP_REPLAY=True, DOUBLE_NETWORK=True, freeze_steps=3000)
-
+                     PRIORITIZED_XP_REPLAY=True, DOUBLE_NETWORK=True, backup_steps=3000)
 
 EPISODES_TO_TEST = 1
 GAMES_LIMIT = 100000
@@ -46,7 +45,7 @@ def atari_prep(img):
 
 
 def next_buf(buffer, gray):
-    buf = np.copy(buffer)
+    buf = buffer
     buf[0, :, :] = buf[1, :, :]
     buf[1, :, :] = buf[2, :, :]
     buf[2, :, :] = buf[3, :, :]
@@ -56,7 +55,7 @@ def next_buf(buffer, gray):
 
 for episode in xrange(GAMES_LIMIT):
     # initialize task
-    if episode % 1 == 0 and episode > 0:
+    if episode % 30 == 0 and episode > 0:
         total_reward = 0
         for i in xrange(EPISODES_TO_TEST):
             state = env.reset()
@@ -109,7 +108,7 @@ for episode in xrange(GAMES_LIMIT):
         # if index >= 4:
         if ATARI:
             if index >= 4:
-                agent.memorize(this_buf, action, float(reward), done)
+                agent.memorize(np.copy(this_buf), action, float(reward), done)
             this_buf = next_buf(this_buf, atari_prep(next_state))
         else:
             agent.memorize(state, action, float(reward), done)

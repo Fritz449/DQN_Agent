@@ -1,6 +1,6 @@
 import numpy as np
 from keras import backend as Theano
-from keras.layers import Dense, Input
+from keras.layers import Dense, Input, Convolution2D, Flatten
 from keras.models import Model
 from keras.optimizers import RMSprop
 
