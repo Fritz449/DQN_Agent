@@ -32,11 +32,11 @@ It is try to make clever samples from experience.
 Probabilities to choose these transitions are computed:  
 ![Probability computation](images/probs.png)  
 where **alpha** is an agent parameter.  
-**p~i~** is the absolute value of TD-error of network on **ith** transition.  
+**p<sub>i</sub>** is the absolute value of TD-error of network on **ith** transition.  
 To reduce the bias we use weighted update of network's parameters. The weights of the update computed as  
 ![Weights computation](images/weights.png)  
 where **beta** is an another agent parameter,
-and then normalized by **max~i~w~i~** for stability reasons.  
+and then normalized by **maxp<sub>i</sub>wp<sub>i</sub>** for stability reasons.  
 [Read the full article here](http://arxiv.org/abs/1511.05952)  
 
 ##### Parameters of agent:
