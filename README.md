@@ -30,11 +30,11 @@ So it can be fixed by modification of target computation.
 - **Prioritized xp-replay**  
 It is try to make clever samples from experience.  
 Probabilities to choose these transitions are computed:  
-![Probability computation](images/probs.png)
+![Probability computation](images/probs.png)  
 where **alpha** is an agent parameter.  
 **p~i~** is the absolute value of TD-error of network on **ith** transition.  
 To reduce the bias we use weighted update of network's parameters. The weights of the update computed as  
-![Weights computation](images/weights.png)
+![Weights computation](images/weights.png)  
 where **beta** is an another agent parameter,
 and then normalized by **max~i~w~i~** for stability reasons.  
 [Read the full article here](http://arxiv.org/abs/1511.05952)  
@@ -51,6 +51,7 @@ and then normalized by **max~i~w~i~** for stability reasons.
 - **alpha** and **beta**: Parameters of prioritized xp-replay described above
 - **backup_steps**: Parameter described above  
 - **gamma**: discount factor of reward  
+
 ### Gym.py 
 Interaction with [Gym](https://gym.openai.com/) made my OpenAI.  
 There is an option to make a preprocessing of images: grayscale + rescale + 4-frames concatenation
