@@ -36,7 +36,7 @@ where **alpha** is an agent parameter.
 To reduce the bias we use weighted update of network's parameters. The weights of the update computed as  
 ![Weights computation](images/weights.png)  
 where **beta** is an another agent parameter,
-and then normalized by **maxp<sub>i</sub>wp<sub>i</sub>** for stability reasons.  
+and then normalized by **max<sub>i</sub>w<sub>i</sub>** for stability reasons.  
 [Read the full article here](http://arxiv.org/abs/1511.05952)  
 
 ##### Parameters of agent:
