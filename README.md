@@ -4,7 +4,7 @@
 Q-network class implemented via Keras using Theano backend.  
 Parameters: state/action dimensionality and batch size. They are initialized directly by agent.  
 Programmer can make a network by editing "create_model" method or use prepared model.  
-The network uses RMSpror optimizer with learning rate **learning_rate** and optimizes MSE. 
+The network uses RMSpror optimizer with learning rate 0.0001 and optimizes MSE. 
 ### Agent_DQN.py 
 Agent class implementation.  
 This agent tries to approximate mapping from space of states  to space of q-values  using Q-network.  
