@@ -1,7 +1,5 @@
 import numpy as np
-
 import QNeuralNetwork as NN
-
 
 class GameAgent:
     def __init__(self, state_dim, action_dim, gamma=0.99, batch_size=32,
@@ -49,7 +47,7 @@ class GameAgent:
             self.sum_prior = 0
             # When agent meets new transition we set maximum priority to it because we want to try to optimize it
             # Agent maintains it as well
-            self.max_prior = 1
+            self.max_prior = 0.00001
             # Here are two prioritized xp-replay parameters
             self.alpha = alpha
             self.beta = beta
@@ -65,6 +63,7 @@ class GameAgent:
 
         # Try to load weights if we made an agent for our task before
         try:
+            print "Try to load networks from files..."
             self.online_network.model.load_weights('{}.h5'.format(self.save_name))
             self.frozen_network.model.load_weights('{}.h5'.format(self.save_name))
             print "Networks are loaded from {}.h5".format(self.save_name)
@@ -92,7 +91,13 @@ class GameAgent:
         else:
             return self.greedy_action(state)
 
-    def memorize(self, state, action, reward, terminal):
+    def action(self, state, episode):
+        if episode % 2 == 0:
+            return self.greedy_action(state)
+        else:
+            return self.e_greedy_action(state)
+
+    def memorize(self, state, action, reward, terminal, train_step=True):
         """ It is a function that called when you want to add a transition to experience buffer
             Args:
               state: state before transition
@@ -105,20 +110,23 @@ class GameAgent:
         if self.time_step % self.backup_steps == 0:
             print 'Backing up networks...'
             self.online_network.model.save_weights('{}.h5'.format(self.save_name), True)
-            self.online_network.model.load_weights('{}.h5'.format(self.save_name))
-            self.frozen_network.model.load_weights('{}.h5'.format(self.save_name))
+            self.frozen_network.model.set_weights(np.copy(self.online_network.model.get_weights()))
             print 'Networks are backed up!'
 
         # Add transition to experience
-        self.experience_state[self.time_step % self.buffer_max_size] = state
+        self.experience_state[self.time_step % self.buffer_max_size] = np.copy(state)
         self.experience_reward[self.time_step % self.buffer_max_size] = reward
         self.experience_action[self.time_step % self.buffer_max_size] = action
         self.experience_done[self.time_step % self.buffer_max_size] = terminal
 
-        # Set prior=0 to last transition because we don't want to optimize it
-        if self.PRIORITIZED_XP_REPLAY:
-            self.sum_prior -= self.experience_prob[self.time_step % self.buffer_max_size]
-            self.experience_prob[self.time_step % self.buffer_max_size] = 0
+        if train_step:
+            # Set prior=0 to last transition because we don't want to optimize it
+            if self.PRIORITIZED_XP_REPLAY:
+                self.sum_prior -= self.experience_prob[self.time_step % self.buffer_max_size]
+                self.experience_prob[self.time_step % self.buffer_max_size] = 0
+            # Make a train_step if buffer is filled enough
+            if self.time_step > self.buffer_max_size / 2:
+                self.train_step()
 
         # Add 1 to buffer_size, restrict it by buffer_max_size
         self.buffer_size += int(self.buffer_size < self.buffer_max_size)
@@ -126,10 +134,6 @@ class GameAgent:
         # Reduce epsilon
         if self.time_step < self.learning_time:
             self.epsilon -= (1 - 0.1) / self.learning_time
-
-        # Make a train_step if buffer is filled enough
-        if self.time_step > self.buffer_max_size / 2:
-            self.train_step()
 
         # Set max_prior to new transition after train_step
         if self.PRIORITIZED_XP_REPLAY:
@@ -180,7 +184,7 @@ class GameAgent:
 
         if self.PRIORITIZED_XP_REPLAY:
             # Compute the weights for weighted update
-            weights_batch = (self.buffer_size * prob_batch) ** self.beta
+            weights_batch = (self.buffer_size * prob_batch) ** -self.beta
             # Normalize weights by their's maximum
             weights_batch /= np.max(weights_batch)
             # Get info from Q-network and make train_step
