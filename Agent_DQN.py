@@ -1,11 +1,13 @@
 import numpy as np
 import QNeuralNetwork as NN
 
+
 class GameAgent:
     def __init__(self, state_dim, action_dim, gamma=0.99, batch_size=32,
-                 buffer_max_size=10000, save_name='dqn', learning_time=100000,
-                 DOUBLE_NETWORK=True, PRIORITIZED_XP_REPLAY=True, alpha=0.6, beta=0.4, backup_steps=5000,
-                 learning_rate=0.0001, debug_steps=500):
+                 buffer_max_size=10000, save_name='dqn', learning_time=1000000,
+                 DOUBLE_NETWORK=True, PRIORITIZED_XP_REPLAY=True, DUELING_ARCHITECTURE=True, alpha=0.6, beta=0.4,
+                 backup_steps=5000,
+                 learning_rate=0.0001, debug_steps=500, train_every_steps=4):
         """ Initialize agent.
             Args:
               state_dim: dimensionality of space of states
@@ -16,11 +18,13 @@ class GameAgent:
               learning_time: From first time-step to learning_time time-step agent reduces e from 1 to 0.1
               DOUBLE_NETWORK: double q-learning activation
               PRIORITIZED_XP_REPLAY: Prioritized xp-replay activation
+              DUELING_ARCHITECTURE:  dueling network architecture activation
               alpha and beta: Parameters of prioritized xp-replay described above
               backup_steps: Parameter described above
               gamma: discount factor of reward
               learning_rate: learning rate of optimizer of networks
               debug_steps: How often agent prints cost of batch
+              train_every_steps: how often agent makes a train step
         """
         # Assign agent features
         self.backup_steps = backup_steps
@@ -35,6 +39,7 @@ class GameAgent:
         self.state_dim = state_dim
         self.action_dim = action_dim
         self.debug_steps = debug_steps
+        self.train_every_steps = train_every_steps
         # Create some supporting variables
         self.indexes = np.arange(self.buffer_max_size)
         self.batch_indexes = np.arange(self.batch_size)
@@ -47,7 +52,7 @@ class GameAgent:
             self.sum_prior = 0
             # When agent meets new transition we set maximum priority to it because we want to try to optimize it
             # Agent maintains it as well
-            self.max_prior = 0.00001
+            self.max_prior = 1
             # Here are two prioritized xp-replay parameters
             self.alpha = alpha
             self.beta = beta
@@ -55,11 +60,10 @@ class GameAgent:
         # Networks initializing
         print 'Online-network initializing...'
         self.online_network = NN.QNeuralNetwork(state_dim, action_dim, batch_size=batch_size,
-                                                learning_rate=learning_rate)
-
+                                                learning_rate=learning_rate, DUELING_ARCHITECTURE=DUELING_ARCHITECTURE)
         print 'Frozen-network initializing...'
         self.frozen_network = NN.QNeuralNetwork(state_dim, action_dim, batch_size=batch_size,
-                                                learning_rate=learning_rate)
+                                                learning_rate=learning_rate, DUELING_ARCHITECTURE=DUELING_ARCHITECTURE)
 
         # Try to load weights if we made an agent for our task before
         try:
@@ -82,7 +86,8 @@ class GameAgent:
 
     def greedy_action(self, state):
         # This is a function for environment-agent interaction
-        return np.argmax(self.online_network.get_output(state))
+        act = np.argmax(self.online_network.get_output(state)[:self.action_dim])
+        return act
 
     def e_greedy_action(self, state):
         # This is a function for environment-agent interaction
@@ -93,7 +98,7 @@ class GameAgent:
 
     def action(self, state, episode):
         if episode % 2 == 0:
-            return self.greedy_action(state)
+            return self.e_greedy_action(state)
         else:
             return self.e_greedy_action(state)
 
@@ -125,11 +130,8 @@ class GameAgent:
                 self.sum_prior -= self.experience_prob[self.time_step % self.buffer_max_size]
                 self.experience_prob[self.time_step % self.buffer_max_size] = 0
             # Make a train_step if buffer is filled enough
-            if self.time_step > self.buffer_max_size / 2:
+            if self.time_step > self.buffer_max_size / 2 and self.time_step % self.train_every_steps == 0:
                 self.train_step()
-
-        # Add 1 to buffer_size, restrict it by buffer_max_size
-        self.buffer_size += int(self.buffer_size < self.buffer_max_size)
 
         # Reduce epsilon
         if self.time_step < self.learning_time:
@@ -139,7 +141,8 @@ class GameAgent:
         if self.PRIORITIZED_XP_REPLAY:
             self.sum_prior += self.max_prior
             self.experience_prob[self.time_step % self.buffer_max_size] = self.max_prior
-
+        # Add 1 to buffer_size, restrict it by buffer_max_size
+        self.buffer_size += int(self.buffer_size < self.buffer_max_size)
         self.time_step += 1
 
     def train_step(self):
@@ -148,10 +151,11 @@ class GameAgent:
             # Scale priority by sum of them
             probs = self.experience_prob / self.sum_prior
             # Choose transitions
-            indexes_batch = np.random.choice(self.indexes, size=self.batch_size, p=probs)
+            indexes_batch = np.random.choice(self.indexes, size=self.batch_size, p=probs, replace=False)
+            # print indexes_batch
         else:
             # Sample transitions and avoid the last memorized transition
-            indexes_batch = np.random.randint(self.buffer_max_size - 1, size=self.batch_size)
+            indexes_batch = np.random.choice(range(self.buffer_size - 1), self.batch_size, replace=False)
             indexes_batch = indexes_batch + (indexes_batch >= self.time_step % self.buffer_max_size).astype('int32')
 
         # Get batch of transitions
@@ -159,7 +163,8 @@ class GameAgent:
         action_batch = self.experience_action[indexes_batch]
         reward_batch = self.experience_reward[indexes_batch]
         # There is a simple trick to get "next_state" from next transition
-        next_state_batch = self.experience_state[(indexes_batch + 1) % self.buffer_max_size]
+        next_state_batch = self.experience_state[(indexes_batch + 1) % self.buffer_size]
+
         done_batch = self.experience_done[indexes_batch]
 
         if self.PRIORITIZED_XP_REPLAY:
@@ -176,7 +181,6 @@ class GameAgent:
         # Compute the target for network
         # If done=1, so next state is terminal and target q-value is equal to reward
         y_batch = (reward_batch + (1 - done_batch) * self.gamma * q_max_batch)
-
         # Reshape for QNeuralNetwork's functions
         y_batch = y_batch.reshape((self.batch_size, 1))
         action_batch = action_batch.reshape((self.batch_size, 1))
@@ -186,16 +190,17 @@ class GameAgent:
             # Compute the weights for weighted update
             weights_batch = (self.buffer_size * prob_batch) ** -self.beta
             # Normalize weights by their's maximum
-            weights_batch /= np.max(weights_batch)
+            weights_batch /= weights_batch.max()
             # Get info from Q-network and make train_step
             cost, error = self.online_network.train_step(y_batch, state_batch, action_batch, weights_batch)
 
             # Change the priorities of transitions we trained
             for i in range(self.batch_size):
-                self.sum_prior = self.sum_prior + abs(error[i]) ** self.alpha - self.experience_prob[indexes_batch[i]]
-                self.experience_prob[indexes_batch[i]] = abs(error[i]) ** self.alpha
+                self.sum_prior = self.sum_prior + (abs(error[i]) + 0.0001) ** self.alpha - self.experience_prob[
+                    indexes_batch[i]]
+                self.experience_prob[indexes_batch[i]] = (abs(error[i]) + 0.0001) ** self.alpha
                 # Try to refresh max_prior
-                self.max_prior = max(self.max_prior, np.max(np.absolute(error)))
+            self.max_prior = np.max(self.experience_prob)
         else:
             cost = self.online_network.train_step(y_batch, state_batch, action_batch)[0]
 
