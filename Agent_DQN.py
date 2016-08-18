@@ -87,6 +87,7 @@ class GameAgent:
     def greedy_action(self, state):
         # This is a function for environment-agent interaction
         act = np.argmax(self.online_network.get_output(state)[:self.action_dim])
+        # print self.online_network.get_output(state)[:self.action_dim]
         return act
 
     def e_greedy_action(self, state):
@@ -98,7 +99,7 @@ class GameAgent:
 
     def action(self, state, episode):
         if episode % 2 == 0:
-            return self.e_greedy_action(state)
+            return self.greedy_action(state)
         else:
             return self.e_greedy_action(state)
 

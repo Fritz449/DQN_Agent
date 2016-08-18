@@ -5,6 +5,11 @@ from keras.layers.normalization import BatchNormalization
 from keras.models import Model
 from keras.optimizers import RMSprop
 from keras.regularizers import l1, l2
+from keras.initializations import normal
+
+
+def my_init(shape, name=None):
+    return normal(shape, scale=0.0000001, name=name)
 
 
 class QNeuralNetwork:
@@ -12,25 +17,22 @@ class QNeuralNetwork:
         # This is the place where neural network model initialized
         self.state_in = Input(self.state_dim)
         self.state_inp = BatchNormalization()(self.state_in)
-        self.l1 = Convolution2D(32, 8, 8, activation='relu', subsample=(4, 4), border_mode='same',
-                                init='glorot_normal')(self.state_inp)
+        self.l1 = Convolution2D(16, 8, 8, activation='softplus', subsample=(4, 4), border_mode='same',
+                                init=my_init)(self.state_inp)
         self.l1bn = BatchNormalization()(self.l1)
-        self.l2 = Convolution2D(64, 4, 4, activation='relu', subsample=(2, 2), border_mode='same',
-                                init='glorot_normal')(self.l1bn)
+        self.l2 = Convolution2D(32, 4, 4, activation='softplus', subsample=(2, 2), border_mode='same',
+                                init=my_init)(self.l1bn)
         self.l2bn = BatchNormalization()(self.l2)
-        self.l3 = Convolution2D(64, 3, 3, activation='relu', border_mode='same',
-                                init='glorot_normal')(self.l2)
-        self.l3bn = BatchNormalization()(self.l3)
-        self.h = Flatten()(self.l3bn)
+        self.h = Flatten()(self.l2bn)
         if self.DUELING_ARCHITECTURE:
-            self.hida = Dense(256, activation='relu')(self.h)
-            self.hidv = Dense(256, activation='relu')(self.h)
+            self.hida = Dense(256, activation='softplus')(self.h)
+            self.hidv = Dense(256, activation='softplus')(self.h)
             self.v = Dense(1)(self.hidv)
             self.a = Dense(self.action_dim)(self.hida)
             self.q = merge([self.a, self.v], mode='concat')
         else:
-            self.hid = Dense(512, activation='relu', init='glorot_normal')(self.h)
-            self.q = Dense(self.action_dim, init='glorot_normal')(self.hid)
+            self.hid = Dense(256, activation='softplus', init=my_init)(self.h)
+            self.q = Dense(self.action_dim, init=my_init)(self.hid)
         self.model = Model(self.state_in, self.q)
 
     # def create_model(self):

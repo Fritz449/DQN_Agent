@@ -19,9 +19,9 @@ if ATARI:
     state_shape = (4, 105, 80)
 else:
     state_shape = state_dim
-agent = AI.GameAgent(state_shape, action_dim, gamma=0.99, buffer_max_size=15000, save_name=ENV_NAME,
-                     PRIORITIZED_XP_REPLAY=False, DOUBLE_NETWORK=False, backup_steps=10000, debug_steps=500,
-                     learning_rate=0.000001, DUELING_ARCHITECTURE=False, batch_size=32, learning_time=100000,
+agent = AI.GameAgent(state_shape, action_dim, gamma=0.99, buffer_max_size=20000, save_name=ENV_NAME,
+                     PRIORITIZED_XP_REPLAY=False, DOUBLE_NETWORK=False, backup_steps=2500, debug_steps=500,
+                     learning_rate=0.00025, DUELING_ARCHITECTURE=False, batch_size=32, learning_time=1000000,
                      train_every_steps=4)
 
 EPISODES_TO_TEST = 1
