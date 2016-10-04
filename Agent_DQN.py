@@ -64,10 +64,12 @@ class GameAgent:
 
         # Networks initializing
         print 'Online-network initializing...'
-        self.online_network = NN.QNeuralNetwork('Online-net', state_dim, action_dim, batch_size=batch_size,
+        self.online_network = NN.QNeuralNetwork('Online-net', state_dim, action_dim, sess=self.sess,
+                                                batch_size=batch_size,
                                                 learning_rate=learning_rate, DUELING_ARCHITECTURE=DUELING_ARCHITECTURE)
         print 'Frozen-network initializing...'
-        self.frozen_network = NN.QNeuralNetwork('Frozen-net', state_dim, action_dim, batch_size=batch_size,
+        self.frozen_network = NN.QNeuralNetwork('Frozen-net', state_dim, action_dim, sess=self.sess,
+                                                batch_size=batch_size,
                                                 learning_rate=learning_rate, DUELING_ARCHITECTURE=DUELING_ARCHITECTURE)
 
         self.sess.run(tf.initialize_all_variables())

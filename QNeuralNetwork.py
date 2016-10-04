@@ -2,6 +2,7 @@ import numpy as np
 import tensorflow as tf
 import os
 
+
 def weight_variable(name, shape, stddev=1. / 256 / 256):
     initial = tf.random_normal(shape, stddev=stddev)
     return tf.get_variable(name, initializer=initial, dtype='float32')
@@ -102,7 +103,7 @@ class QNeuralNetwork:
             self.q = fc_layer('q-value', self.hid, self.action_dim)
         return self.q
 
-    def __init__(self, name, state_dim, action_dim, batch_size=32, learning_rate=0.1, DUELING_ARCHITECTURE=False):
+    def __init__(self, name, state_dim, action_dim, sess, batch_size=32, learning_rate=0.1, DUELING_ARCHITECTURE=False):
         """ Initialize Q-network.
             Args:
               state_dim: dimensionality of space of states
@@ -110,10 +111,11 @@ class QNeuralNetwork:
               batch_size: size of minibatch for network's train
               learning_rate: learning rate of optimizer
               DUELING_ARCHITECTURE: dueling network architecture activation
-              conv_model: whether agent uses convolutional neural network
+              sess: tf-session
         """
 
         # Assign network features
+        self.sess = sess
         self.name = name
         self.state_dim = state_dim
         self.action_dim = action_dim
@@ -145,7 +147,6 @@ class QNeuralNetwork:
         # Initialize an optimizer
         self.optimizer = tf.train.AdamOptimizer(self.learning_rate).minimize(self.loss)
 
-
     def get_output(self, state):
         # This is a function for simple agent-network interaction
         return self.Qs.eval(feed_dict={self.state_in: state, self.train: False})
@@ -160,7 +161,7 @@ class QNeuralNetwork:
         """
         if weights is None:
             weights = np.ones(state_in.shape[0], )
-        weights = weights.reshape(state_in.shape[0],)
+        weights = weights.reshape(state_in.shape[0], )
         return self.sess.run([self.optimizer, self.loss, self.error], feed_dict={self.actions: actions,
                                                                                  self.state_in: state_in,
                                                                                  self.weights: weights,
@@ -168,18 +169,16 @@ class QNeuralNetwork:
                                                                                  self.train: True
                                                                                  })[1:]
 
-    # def save_net(self, epoch):
-    #     if not os.path.exists(self.name + '/'):
-    #         os.makedirs(self.name + '/')
-    #     self.saver.save(self.sess, self.name + '/model.ckpt',
-    #                     global_step=epoch + 1)
-    #
-    # def load_net(self, name='Online-net'):
-    #     ckpt = tf.train.get_checkpoint_state(name + '/')
-    #     if ckpt and ckpt.model_checkpoint_path:
-    #         self.saver.restore(self.sess, ckpt.model_checkpoint_path)
-    #         print 'found a checkpoint'
-    #     else:
-    #         print 'no checkpoints founded'
-
-
+        # def save_net(self, epoch):
+        #     if not os.path.exists(self.name + '/'):
+        #         os.makedirs(self.name + '/')
+        #     self.saver.save(self.sess, self.name + '/model.ckpt',
+        #                     global_step=epoch + 1)
+        #
+        # def load_net(self, name='Online-net'):
+        #     ckpt = tf.train.get_checkpoint_state(name + '/')
+        #     if ckpt and ckpt.model_checkpoint_path:
+        #         self.saver.restore(self.sess, ckpt.model_checkpoint_path)
+        #         print 'found a checkpoint'
+        #     else:
+        #         print 'no checkpoints founded'
