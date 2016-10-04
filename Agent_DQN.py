@@ -206,11 +206,11 @@ class GameAgent:
         if self.time_step % self.debug_steps == 0:
             print "Cost for the batch:" + str(cost), self.epsilon, np.mean(output_frozen)
 
-    def save_agent(self, epoch, name='DQN_w'):
+    def save_agent(self, name='DQN_w'):
         if not os.path.exists(name + '/'):
             os.makedirs(name + '/')
         self.saver.save(self.sess, name + '/model.ckpt',
-                        global_step=epoch + 1)
+                        global_step=self.time_step + 1)
 
     def load_agent(self, name='DQN_w'):
         ckpt = tf.train.get_checkpoint_state(name + '/')

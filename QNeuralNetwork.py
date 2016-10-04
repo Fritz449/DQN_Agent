@@ -58,7 +58,6 @@ def conv_layer(name, input_tensor, kernel_shape, train, relu=True, alpha=0, max_
 
 def fc_layer(name, input_tensor, n_out, relu=True, alpha=0):
     with tf.variable_scope(name):
-        print input_tensor.get_shape()
         weights = weight_variable("weights", shape=(int(input_tensor.get_shape()[1]), n_out),
                                   stddev=1. / int(input_tensor.get_shape()[1]) / n_out)
         biases = bias_variable("bias", shape=(n_out,))
@@ -73,14 +72,11 @@ class QNeuralNetwork:
     def create_conv_model(self):
         # This is the place where neural network model initialized
         self.state_in = tf.placeholder(shape=((None,) + self.state_dim), dtype='float32')
-        print self.state_in.get_shape()
         self.l1 = conv_layer(self.name + 'conv1', self.state_in, (8, 8, 4, 32), max_pooling=4, train=self.train)
         self.l2 = conv_layer(self.name + 'conv2', self.l1, (4, 4, 32, 64), max_pooling=2, train=self.train)
         self.l3 = conv_layer(self.name + 'conv3', self.l2, (3, 3, 64, 64), max_pooling=1, train=self.train)
-        print self.l3.get_shape()
         self.h = tf.reshape(self.l3, [tf.shape(self.l3)[0],
                                       int(self.l3.get_shape()[1] * self.l3.get_shape()[2] * self.l3.get_shape()[3])])
-        print self.h.get_shape()
         if self.DUELING_ARCHITECTURE:
             self.hida = fc_layer(self.name + 'hida', self.h, 256)
             self.hidv = fc_layer(self.name + 'hidv', self.h, 256)
