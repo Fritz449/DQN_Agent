@@ -75,7 +75,7 @@ class GameAgent:
         # Try to load weights if we made an agent for our task before
         try:
             print "Try to load networks from files..."
-            self.load_net()
+            self.load_agent()
         except:
             print "Training a new model"
 
@@ -206,13 +206,13 @@ class GameAgent:
         if self.time_step % self.debug_steps == 0:
             print "Cost for the batch:" + str(cost), self.epsilon, np.mean(output_frozen)
 
-    def save_net(self, epoch, name='DQN_w'):
+    def save_agent(self, epoch, name='DQN_w'):
         if not os.path.exists(name + '/'):
             os.makedirs(name + '/')
         self.saver.save(self.sess, name + '/model.ckpt',
                         global_step=epoch + 1)
 
-    def load_net(self, name='DQN_w'):
+    def load_agent(self, name='DQN_w'):
         ckpt = tf.train.get_checkpoint_state(name + '/')
         if ckpt and ckpt.model_checkpoint_path:
             self.saver.restore(self.sess, ckpt.model_checkpoint_path)
@@ -229,5 +229,5 @@ class GameAgent:
         for e1_v, e2_v in zip(e1_params, e2_params):
             op = e2_v.assign(e1_v)
             update_ops.append(op)
-
+        self.save_agent()
         self.sess.run(update_ops)
