@@ -4,10 +4,10 @@ import QNeuralNetwork as NN
 
 class GameAgent:
     def __init__(self, state_dim, action_dim, gamma=0.99, batch_size=32,
-                 buffer_max_size=10000, save_name='dqn', learning_time=1000000,
-                 DOUBLE_NETWORK=True, PRIORITIZED_XP_REPLAY=True, DUELING_ARCHITECTURE=True, alpha=0.6, beta=0.4,
+                 buffer_max_size=10000, save_name='dqn', learning_time=10000, n_observe=100000,
+                 DOUBLE_NETWORK=False, PRIORITIZED_XP_REPLAY=False, DUELING_ARCHITECTURE=False, alpha=0.6, beta=0.4,
                  backup_steps=5000,
-                 learning_rate=0.0001, debug_steps=500, train_every_steps=4):
+                 learning_rate=1., debug_steps=500, train_every_steps=4):
         """ Initialize agent.
             Args:
               state_dim: dimensionality of space of states
@@ -36,16 +36,18 @@ class GameAgent:
         self.gamma = gamma
         self.batch_size = batch_size
         self.epsilon = 1.0
+        self.end_epsilon = 0.01
         self.state_dim = state_dim
         self.action_dim = action_dim
         self.debug_steps = debug_steps
         self.train_every_steps = train_every_steps
+        self.n_observe = n_observe
         # Create some supporting variables
         self.indexes = np.arange(self.buffer_max_size)
         self.batch_indexes = np.arange(self.batch_size)
         self.time_step = 0
         self.buffer_size = 0
-
+        self.delta_eps = (self.epsilon - self.end_epsilon) / learning_time
         if self.PRIORITIZED_XP_REPLAY:
             # It is the sum of the priorities of all transitions.
             # Agent maintains it just because it's inefficiently to compute that big sum at every step
@@ -59,18 +61,18 @@ class GameAgent:
 
         # Networks initializing
         print 'Online-network initializing...'
-        self.online_network = NN.QNeuralNetwork(state_dim, action_dim, batch_size=batch_size,
+        self.online_network = NN.QNeuralNetwork('Online-net', state_dim, action_dim, batch_size=batch_size,
                                                 learning_rate=learning_rate, DUELING_ARCHITECTURE=DUELING_ARCHITECTURE)
         print 'Frozen-network initializing...'
-        self.frozen_network = NN.QNeuralNetwork(state_dim, action_dim, batch_size=batch_size,
+        self.frozen_network = NN.QNeuralNetwork('Frozen-net', state_dim, action_dim, batch_size=batch_size,
                                                 learning_rate=learning_rate, DUELING_ARCHITECTURE=DUELING_ARCHITECTURE)
 
         # Try to load weights if we made an agent for our task before
         try:
             print "Try to load networks from files..."
-            self.online_network.model.load_weights('{}.h5'.format(self.save_name))
-            self.frozen_network.model.load_weights('{}.h5'.format(self.save_name))
-            print "Networks are loaded from {}.h5".format(self.save_name)
+            self.online_network.load_net()
+            self.frozen_network.load_net()
+            print "Networks are loaded".format(self.save_name)
         except:
             print "Training a new model"
 
@@ -98,8 +100,8 @@ class GameAgent:
             return self.greedy_action(state)
 
     def action(self, state, episode):
-        if episode % 2 == 0:
-            return self.greedy_action(state)
+        if episode % 100 == 0:
+            return self.e_greedy_action(state)
         else:
             return self.e_greedy_action(state)
 
@@ -113,10 +115,10 @@ class GameAgent:
         """
 
         # Back up weights if time has come...
-        if self.time_step % self.backup_steps == 0:
-            print 'Backing up networks...'
-            self.online_network.model.save_weights('{}.h5'.format(self.save_name), True)
-            self.frozen_network.model.set_weights(np.copy(self.online_network.model.get_weights()))
+        if self.time_step % self.backup_steps == 0 and self.time_step > 0:
+            # print 'Backing up networks...'
+            self.online_network.save_net(self.time_step)
+            self.frozen_network.load_net('Online-net')
             print 'Networks are backed up!'
 
         # Add transition to experience
@@ -135,8 +137,8 @@ class GameAgent:
                 self.train_step()
 
         # Reduce epsilon
-        if self.time_step < self.learning_time:
-            self.epsilon -= (1 - 0.1) / self.learning_time
+        if self.n_observe < self.time_step < self.learning_time + self.n_observe:
+            self.epsilon -= (1 - 0.01) / self.learning_time
 
         # Set max_prior to new transition after train_step
         if self.PRIORITIZED_XP_REPLAY:
@@ -165,28 +167,21 @@ class GameAgent:
         reward_batch = self.experience_reward[indexes_batch]
         # There is a simple trick to get "next_state" from next transition
         next_state_batch = self.experience_state[(indexes_batch + 1) % self.buffer_size]
-
         done_batch = self.experience_done[indexes_batch]
-
         if self.PRIORITIZED_XP_REPLAY:
             prob_batch = self.experience_prob[indexes_batch]
 
         # Compute the q-value target
+        output_frozen = self.frozen_network.get_output(next_state_batch)
         if self.DOUBLE_NETWORK:
             q_argmax_online = np.argmax(self.online_network.get_output(next_state_batch), axis=1)
-            output_frozen = self.frozen_network.get_output(next_state_batch)
             q_max_batch = output_frozen[self.batch_indexes, q_argmax_online]
         else:
-            q_max_batch = np.max(self.frozen_network.get_output(next_state_batch), axis=1)
+            q_max_batch = np.max(output_frozen, axis=1)
 
         # Compute the target for network
         # If done=1, so next state is terminal and target q-value is equal to reward
         y_batch = (reward_batch + (1 - done_batch) * self.gamma * q_max_batch)
-        # Reshape for QNeuralNetwork's functions
-        y_batch = y_batch.reshape((self.batch_size, 1))
-        action_batch = action_batch.reshape((self.batch_size, 1))
-        state_batch = state_batch.reshape((self.batch_size,) + self.state_dim)
-
         if self.PRIORITIZED_XP_REPLAY:
             # Compute the weights for weighted update
             weights_batch = (self.buffer_size * prob_batch) ** -self.beta
@@ -207,4 +202,4 @@ class GameAgent:
 
         # Sometimes agent prints the cost value of batch
         if self.time_step % self.debug_steps == 0:
-            print "Cost for the batch:" + str(cost)
+            print "Cost for the batch:" + str(cost), self.epsilon, np.mean(output_frozen)

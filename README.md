@@ -1,7 +1,7 @@
 # DQN Agent
 ## Structure of project
 ### QNeuralNetwork.py
-Q-network class implemented via Keras using Theano backend.  
+Q-network class implemented via Tensorflow.  
 Parameters: state/action dimensionality and batch size. They are initialized directly by agent.  
 Programmer can make a network by editing "create_model" method or use prepared model.  
 The network uses RMSpror optimizer with learning rate 0.0001 and optimizes MSE. 
@@ -39,6 +39,14 @@ where **beta** is an another agent parameter,
 and then normalized by **max<sub>i</sub>w<sub>i</sub>** for stability reasons.  
 [Read the full article here](http://arxiv.org/abs/1511.05952)  
 
+- **Dueling Architecture**
+It is try to make a network's architecture more suitable for RL. Simply it looks like:  
+![Dueling Architecture](images/dueling.png)  
+Dueling architecture is the bottom one :)  
+You can read full article to get [full description of the idea here](https://arxiv.org/abs/1511.06581):  
+
+
+
 ##### Parameters of agent:
 - **state_dim**: dimensionality of space of states
 - **action_dim**: dimensionality of space of actions
@@ -58,13 +66,8 @@ and then normalized by **max<sub>i</sub>w<sub>i</sub>** for stability reasons.
 Interaction with [Gym](https://gym.openai.com/) made my OpenAI.  
 There is an option to make a preprocessing of images: grayscale + rescale + 4-frames concatenation
 
-## TO DO:
-- **Deep exploration via Bootstraped DQN**
-- **Dueling Architecture**
-
 ## Dependencies:
 - **Numpy**
-- **Keras**
-- **Theano**
+- **Tensorflow**
 - **Gym**
 - **Scipy**
