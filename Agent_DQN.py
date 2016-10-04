@@ -1,5 +1,7 @@
 import numpy as np
 import QNeuralNetwork as NN
+import tensorflow as tf
+import os
 
 
 class GameAgent:
@@ -48,6 +50,7 @@ class GameAgent:
         self.time_step = 0
         self.buffer_size = 0
         self.delta_eps = (self.epsilon - self.end_epsilon) / learning_time
+        self.sess = tf.InteractiveSession()
         if self.PRIORITIZED_XP_REPLAY:
             # It is the sum of the priorities of all transitions.
             # Agent maintains it just because it's inefficiently to compute that big sum at every step
@@ -67,12 +70,12 @@ class GameAgent:
         self.frozen_network = NN.QNeuralNetwork('Frozen-net', state_dim, action_dim, batch_size=batch_size,
                                                 learning_rate=learning_rate, DUELING_ARCHITECTURE=DUELING_ARCHITECTURE)
 
+        self.sess.run(tf.initialize_all_variables())
+        self.saver = tf.train.Saver(tf.all_variables())
         # Try to load weights if we made an agent for our task before
         try:
             print "Try to load networks from files..."
-            self.online_network.load_net()
-            self.frozen_network.load_net()
-            print "Networks are loaded".format(self.save_name)
+            self.load_net()
         except:
             print "Training a new model"
 
@@ -115,10 +118,9 @@ class GameAgent:
         """
 
         # Back up weights if time has come...
-        if self.time_step % self.backup_steps == 0 and self.time_step > 0:
+        if self.time_step % self.backup_steps == 0:
             # print 'Backing up networks...'
-            self.online_network.save_net(self.time_step)
-            self.frozen_network.load_net('Online-net')
+            self.update_target_network()
             print 'Networks are backed up!'
 
         # Add transition to experience
@@ -198,8 +200,34 @@ class GameAgent:
                 # Try to refresh max_prior
             self.max_prior = np.max(self.experience_prob)
         else:
-            cost = self.online_network.train_step(y_batch, state_batch, action_batch)[0]
+            cost, error = self.online_network.train_step(y_batch, state_batch, action_batch)
 
         # Sometimes agent prints the cost value of batch
         if self.time_step % self.debug_steps == 0:
             print "Cost for the batch:" + str(cost), self.epsilon, np.mean(output_frozen)
+
+    def save_net(self, epoch, name='DQN_w'):
+        if not os.path.exists(name + '/'):
+            os.makedirs(name + '/')
+        self.saver.save(self.sess, name + '/model.ckpt',
+                        global_step=epoch + 1)
+
+    def load_net(self, name='DQN_w'):
+        ckpt = tf.train.get_checkpoint_state(name + '/')
+        if ckpt and ckpt.model_checkpoint_path:
+            self.saver.restore(self.sess, ckpt.model_checkpoint_path)
+            print 'found a checkpoint'
+        else:
+            print 'no checkpoints founded'
+
+    def update_target_network(self):
+        e1_params = [t for t in tf.trainable_variables() if t.name.startswith('Online-net')]
+        e1_params = sorted(e1_params, key=lambda v: v.name)
+        e2_params = [t for t in tf.trainable_variables() if t.name.startswith('Frozen-net')]
+        e2_params = sorted(e2_params, key=lambda v: v.name)
+        update_ops = []
+        for e1_v, e2_v in zip(e1_params, e2_params):
+            op = e2_v.assign(e1_v)
+            update_ops.append(op)
+
+        self.sess.run(update_ops)

@@ -19,7 +19,7 @@ if ATARI:
     state_shape = (105, 80, 4)
 else:
     state_shape = state_dim
-agent = AI.GameAgent(state_shape, action_dim, gamma=0.99, buffer_max_size=500, save_name=ENV_NAME,
+agent = AI.GameAgent(state_shape, action_dim, gamma=0.99, buffer_max_size=30000, save_name=ENV_NAME,
                      PRIORITIZED_XP_REPLAY=False, DOUBLE_NETWORK=False, backup_steps=20000, debug_steps=100,
                      learning_rate=0.1, DUELING_ARCHITECTURE=False, batch_size=32, learning_time=1000000,
                      train_every_steps=4)
@@ -108,7 +108,7 @@ for episode in xrange(GAMES_LIMIT):
 
         else:
             agent.memorize(np.copy(state), action, float(reward), done)
-        if agent.time_step % 1000 == 1:
+        if agent.time_step % 1000 == 1 and index >= 10:
             print agent.time_step
         total_reward += reward
         state = np.copy(next_state)

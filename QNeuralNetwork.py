@@ -8,7 +8,7 @@ def weight_variable(name, shape, stddev=1. / 256 / 256):
 
 
 def bias_variable(name, shape):
-    initial = tf.constant(0.00000001, shape=shape)
+    initial = tf.constant(0.00001, shape=shape)
     return tf.get_variable(name, initializer=initial, dtype='float32')
 
 
@@ -36,7 +36,7 @@ def batch_norm(scope, x, n_out, phase_train):
 def conv_layer(name, input_tensor, kernel_shape, train, relu=True, alpha=0, max_pooling=None, b_norm=True,
                reflect=False):
     with tf.variable_scope(name):
-        kernel = weight_variable("kernel", kernel_shape, 1. / kernel_shape[1] / kernel_shape[2] / kernel_shape[0] / 100)
+        kernel = weight_variable("kernel", kernel_shape, 1. / kernel_shape[1] / kernel_shape[2] / kernel_shape[0])
         biases = bias_variable("bias", (kernel_shape[3],))
         if reflect:
             input_tensor = tf.pad(input_tensor, [[0, 0], [kernel_shape[1] / 2, kernel_shape[1] / 2],
@@ -107,7 +107,6 @@ class QNeuralNetwork:
         return self.q
 
     def __init__(self, name, state_dim, action_dim, batch_size=32, learning_rate=0.1, DUELING_ARCHITECTURE=False):
-        self.sess = tf.InteractiveSession()
         """ Initialize Q-network.
             Args:
               state_dim: dimensionality of space of states
@@ -149,8 +148,7 @@ class QNeuralNetwork:
         self.loss = tf.reduce_mean(self.weights * (self.error ** 2))
         # Initialize an optimizer
         self.optimizer = tf.train.AdamOptimizer(self.learning_rate).minimize(self.loss)
-        self.sess.run(tf.initialize_all_variables())
-        self.saver = tf.train.Saver()
+
 
     def get_output(self, state):
         # This is a function for simple agent-network interaction
@@ -174,18 +172,18 @@ class QNeuralNetwork:
                                                                                  self.train: True
                                                                                  })[1:]
 
-    def save_net(self, epoch):
-        if not os.path.exists(self.name + '/'):
-            os.makedirs(self.name + '/')
-        self.saver.save(self.sess, self.name + '/model.ckpt',
-                        global_step=epoch + 1)
-
-    def load_net(self, name='Online-net'):
-        ckpt = tf.train.get_checkpoint_state(name + '/')
-        if ckpt and ckpt.model_checkpoint_path:
-            self.saver.restore(self.sess, ckpt.model_checkpoint_path)
-            print 'found a checkpoint'
-        else:
-            print 'no checkpoints founded'
+    # def save_net(self, epoch):
+    #     if not os.path.exists(self.name + '/'):
+    #         os.makedirs(self.name + '/')
+    #     self.saver.save(self.sess, self.name + '/model.ckpt',
+    #                     global_step=epoch + 1)
+    #
+    # def load_net(self, name='Online-net'):
+    #     ckpt = tf.train.get_checkpoint_state(name + '/')
+    #     if ckpt and ckpt.model_checkpoint_path:
+    #         self.saver.restore(self.sess, ckpt.model_checkpoint_path)
+    #         print 'found a checkpoint'
+    #     else:
+    #         print 'no checkpoints founded'
 
 
