@@ -1,109 +1,55 @@
 import numpy as np
-import tensorflow as tf
-import os
+from keras import backend as Theano
+from keras.layers import Dense, Input, Convolution2D, Flatten, merge
+from keras.layers.normalization import BatchNormalization
+from keras.models import Model
+from keras.optimizers import Adadelta, RMSprop, Adam
+from keras.regularizers import l1, l2
+from keras.initializations import normal
 
 
-def weight_variable(name, shape, stddev=1. / 256 / 256):
-    initial = tf.random_normal(shape, stddev=stddev)
-    return tf.get_variable(name, initializer=initial, dtype='float32')
-
-
-def bias_variable(name, shape):
-    initial = tf.constant(0.00001, shape=shape)
-    return tf.get_variable(name, initializer=initial, dtype='float32')
-
-
-def batch_norm(scope, x, n_out, phase_train):
-    with tf.variable_scope(scope):
-        beta = tf.Variable(tf.constant(0.0, shape=[n_out]),
-                           name='beta', trainable=True)
-        gamma = tf.Variable(tf.constant(1.0, shape=[n_out]),
-                            name='gamma', trainable=True)
-        batch_mean, batch_var = tf.nn.moments(x, [0, 1, 2], name='moments')
-        ema = tf.train.ExponentialMovingAverage(decay=0.5)
-
-        def mean_var_with_update():
-            ema_apply_op = ema.apply([batch_mean, batch_var])
-            with tf.control_dependencies([ema_apply_op]):
-                return tf.identity(batch_mean), tf.identity(batch_var)
-
-        mean, var = tf.cond(phase_train,
-                            mean_var_with_update,
-                            lambda: (ema.average(batch_mean), ema.average(batch_var)))
-        normed = tf.nn.batch_normalization(x, mean, var, beta, gamma, 1e-3)
-    return normed
-
-
-def conv_layer(name, input_tensor, kernel_shape, train, relu=True, alpha=0, max_pooling=None, b_norm=True,
-               reflect=False):
-    with tf.variable_scope(name):
-        kernel = weight_variable("kernel", kernel_shape, 1. / kernel_shape[1] / kernel_shape[2] / kernel_shape[0])
-        biases = bias_variable("bias", (kernel_shape[3],))
-        if reflect:
-            input_tensor = tf.pad(input_tensor, [[0, 0], [kernel_shape[1] / 2, kernel_shape[1] / 2],
-                                                 [kernel_shape[1] / 2, kernel_shape[1] / 2], [0, 0]], mode='REFLECT')
-            convolution = tf.nn.conv2d(input_tensor, kernel, strides=[1, 1, 1, 1], padding='VALID')
-        else:
-            convolution = tf.nn.conv2d(input_tensor, kernel, strides=[1, 1, 1, 1], padding='SAME')
-        end = convolution + biases
-        if b_norm:
-            end = batch_norm(name + 'bn', end, kernel_shape[3], train)
-        if relu:
-            end = tf.maximum(tf.mul(end, alpha), end)
-
-        if not (max_pooling is None):
-            return tf.nn.max_pool(end, ksize=[1, max_pooling, max_pooling, 1], strides=[1, max_pooling, max_pooling, 1],
-                                  padding='SAME')
-        return end
-
-
-def fc_layer(name, input_tensor, n_out, relu=True, alpha=0):
-    with tf.variable_scope(name):
-        weights = weight_variable("weights", shape=(int(input_tensor.get_shape()[1]), n_out),
-                                  stddev=1. / int(input_tensor.get_shape()[1]) / n_out)
-        biases = bias_variable("bias", shape=(n_out,))
-        out = tf.matmul(input_tensor, weights) + biases
-
-        if relu:
-            out = tf.maximum(tf.mul(out, alpha), out)
-        return out
+def my_init(shape, name=None):
+    return normal(shape, scale=0.0001, name=name)
 
 
 class QNeuralNetwork:
-    def create_conv_model(self):
+    def create_model(self):
         # This is the place where neural network model initialized
-        self.state_in = tf.placeholder(shape=((None,) + self.state_dim), dtype='float32')
-        self.l1 = conv_layer(self.name + 'conv1', self.state_in, (8, 8, 4, 32), max_pooling=4, train=self.train)
-        self.l2 = conv_layer(self.name + 'conv2', self.l1, (4, 4, 32, 64), max_pooling=2, train=self.train)
-        self.l3 = conv_layer(self.name + 'conv3', self.l2, (3, 3, 64, 64), max_pooling=1, train=self.train)
-        self.h = tf.reshape(self.l3, [tf.shape(self.l3)[0],
-                                      int(self.l3.get_shape()[1] * self.l3.get_shape()[2] * self.l3.get_shape()[3])])
+        self.state_in = Input(self.state_dim)
+        # self.state_inp = BatchNormalization()(self.state_in)
+        self.l1 = Convolution2D(32, 8, 8, activation='relu', subsample=(4, 4), border_mode='same')(self.state_in)
+        # self.l1bn = BatchNormalization()(self.l1)
+        self.l2 = Convolution2D(64, 4, 4, activation='relu', subsample=(2, 2), border_mode='same')(self.l1)
+        # self.l2bn = BatchNormalization()(self.l2)
+        self.l3 = Convolution2D(64, 3, 3, activation='relu', subsample=(1, 1), border_mode='same')(self.l2)
+        # self.l3bn = BatchNormalization()(self.l3)
+        self.h = Flatten()(self.l3)
         if self.DUELING_ARCHITECTURE:
-            self.hida = fc_layer(self.name + 'hida', self.h, 256)
-            self.hidv = fc_layer(self.name + 'hidv', self.h, 256)
-            self.v = fc_layer(self.name + 'value', self.hidv, 1)
-            self.a = fc_layer(self.name + 'advan', self.hida, self.action_dim)
-            self.q = self.v + self.a - tf.reduce_mean(self.a)
+            self.hida = Dense(256, activation='relu')(self.h)
+            self.hidv = Dense(256, activation='relu')(self.h)
+            self.v = Dense(1)(self.hidv)
+            self.a = Dense(self.action_dim)(self.hida)
+            self.q = merge([self.a, self.v], mode='concat')
         else:
-            self.hid = fc_layer(self.name + 'hid', self.h, 256)
-            self.q = fc_layer(self.name + 'q-value', self.hid, self.action_dim)
-        return self.q
+            self.hid = Dense(128, activation='relu')(self.h)
+            self.q = Dense(self.action_dim)(self.hid)
+        self.model = Model(self.state_in, self.q)
 
-    def create_fc_model(self):
-        # This is the place where neural network model initialized
-        self.state_in = tf.placeholder(shape=((None,) + self.state_dim), dtype='float32')
-        if self.DUELING_ARCHITECTURE:
-            self.hida = fc_layer('hida', self.state_in, 256)
-            self.hidv = fc_layer('hidv', self.state_in, 256)
-            self.v = fc_layer('value', self.hidv, 1)
-            self.a = fc_layer('advan', self.hida, self.action_dim)
-            self.q = self.v + self.a - tf.reduce_mean(self.a)
-        else:
-            self.hid = fc_layer('hid', self.state_in, 256)
-            self.q = fc_layer('q-value', self.hid, self.action_dim)
-        return self.q
+    # def create_model(self):
+    #     # This is the place where neural network model initialized
+    #     self.state_in = Input(self.state_dim)  # This layer is required for any network.
+    #     if self.DUELING_ARCHITECTURE:
+    #         self.hida = Dense(10, activation='relu')(self.state_in)
+    #         self.hidv = Dense(10, activation='relu')(self.state_in)
+    #         self.v = Dense(1)(self.hidv)
+    #         self.a = Dense(self.action_dim)(self.hida)
+    #         self.q = merge([self.a, self.v], mode='concat')
+    #     else:
+    #         self.hid = Dense(64, activation='relu', init='lecun_uniform')(self.state_in)
+    #         self.q = Dense(self.action_dim, init='lecun_uniform')(self.hid)
+    #     self.model = Model(self.state_in, self.q)  # Complete the model
 
-    def __init__(self, name, state_dim, action_dim, sess, batch_size=32, learning_rate=0.1, DUELING_ARCHITECTURE=False):
+    def __init__(self, state_dim, action_dim, batch_size=32, learning_rate=1., DUELING_ARCHITECTURE=False):
         """ Initialize Q-network.
             Args:
               state_dim: dimensionality of space of states
@@ -111,74 +57,68 @@ class QNeuralNetwork:
               batch_size: size of minibatch for network's train
               learning_rate: learning rate of optimizer
               DUELING_ARCHITECTURE: dueling network architecture activation
-              sess: tf-session
         """
 
         # Assign network features
-        self.sess = sess
-        self.name = name
         self.state_dim = state_dim
         self.action_dim = action_dim
         self.batch_size = batch_size
         self.learning_rate = learning_rate
         self.DUELING_ARCHITECTURE = DUELING_ARCHITECTURE
         # Create input for training
-        self.actions = tf.placeholder(shape=(self.batch_size,), dtype='int32')
-        self.target = tf.placeholder(shape=(self.batch_size,), dtype='float32')
-        # These weights are for weighted update
-        self.weights = tf.placeholder(shape=(self.batch_size,),
-                                      dtype='float32')
-        # Train/Using phase
-        self.train = tf.placeholder(dtype='bool')
+        self.actions = Input(shape=(self.batch_size,), dtype='int32')
+        self.target = Input(shape=(self.batch_size,), dtype='int32')
+        self.weights = Input(shape=(self.batch_size,), dtype='float32')  # These weights are for weighted update
 
-        # Initialize model and compute q-values
-        if len(state_dim) == 3:
-            self.Qs = self.create_conv_model()
-        else:
-            self.Qs = self.create_fc_model()
+        # Initialize model
+        self.create_model()
 
+        # Compute q-values
+
+        self.Qs = self.model.layers[-1].output
+
+        # Make a function for get output of network
+        self.q_value = Theano.function([self.state_in], self.Qs[:, :self.action_dim])
         # Get q-values for corresponding actions
-        idx_flattened = tf.range(0, self.batch_size) * self.action_dim + self.actions
-        self.q_output = tf.gather(tf.reshape(self.Qs, [-1]), idx_flattened)
+        if DUELING_ARCHITECTURE:
+            self.a_output = self.Qs[np.array(range(self.batch_size)), self.actions.reshape((self.batch_size,))]
+            self.v_output = self.Qs[np.array(range(self.batch_size)), -1]
+            self.q_output = self.a_output + self.v_output - self.Qs[np.array(range(self.batch_size)),
+                                                            :self.action_dim].mean(axis=1)
+
+        else:
+            self.q_output = self.Qs[np.array(range(self.batch_size)), self.actions.reshape((self.batch_size,))]
+
         # Compute TD-error
-        self.error = (self.q_output - self.target)
+        self.error = (self.q_output - self.target.reshape((self.batch_size,)))
         # Make a MSE-cost function
-        self.loss = tf.reduce_mean(self.weights * (self.error ** 2))
+        self.cost = (self.weights * (self.error ** 2)).mean()
         # Initialize an optimizer
-        self.optimizer = tf.train.AdamOptimizer(self.learning_rate).minimize(self.loss)
+        self.opt = Adam(lr=self.learning_rate)
+        self.params = self.model.trainable_weights
+        self.updates = self.opt.get_updates(self.params, [], self.cost)
+
+        # Make a function to update weights and get information about cost an TD-errors
+        self.tr_step = Theano.function(
+            [self.target, self.state_in, self.actions, self.weights],  # Input
+            [self.cost, self.error, self.Qs],  # Output when make a training step
+            updates=self.updates)  # Update weights
 
     def get_output(self, state):
         # This is a function for simple agent-network interaction
-        return self.Qs.eval(feed_dict={self.state_in: state, self.train: False})
+
+        return self.q_value([state])
 
     def q_actions(self, state, actions):
         # This is a function for simple agent-network interaction
-        return self.q_output.eval(feed_dict={self.state_in: state, self.actions: actions, self.train: False})
+
+        return self.q_value([state])[np.array(range(self.batch_size)), actions]
 
     def train_step(self, target, state_in, actions, weights=None):
         """ This is a function which agent calls when want to train network.
         If there is no prioritized xp-replay there is no weighted update and weights are set as 1
         """
         if weights is None:
-            weights = np.ones(state_in.shape[0], )
-        weights = weights.reshape(state_in.shape[0], )
-        return self.sess.run([self.optimizer, self.loss, self.error], feed_dict={self.actions: actions,
-                                                                                 self.state_in: state_in,
-                                                                                 self.weights: weights,
-                                                                                 self.target: target,
-                                                                                 self.train: True
-                                                                                 })[1:]
-
-        # def save_net(self, epoch):
-        #     if not os.path.exists(self.name + '/'):
-        #         os.makedirs(self.name + '/')
-        #     self.saver.save(self.sess, self.name + '/model.ckpt',
-        #                     global_step=epoch + 1)
-        #
-        # def load_net(self, name='Online-net'):
-        #     ckpt = tf.train.get_checkpoint_state(name + '/')
-        #     if ckpt and ckpt.model_checkpoint_path:
-        #         self.saver.restore(self.sess, ckpt.model_checkpoint_path)
-        #         print 'found a checkpoint'
-        #     else:
-        #         print 'no checkpoints founded'
+            weights = np.ones((1, state_in.shape[0]))
+        weights = weights.reshape(1, state_in.shape[0])
+        return self.tr_step([target, state_in, actions, weights])

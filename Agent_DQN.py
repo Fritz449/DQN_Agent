@@ -1,7 +1,5 @@
 import numpy as np
 import QNeuralNetwork as NN
-import tensorflow as tf
-import os
 
 
 class GameAgent:
@@ -50,7 +48,6 @@ class GameAgent:
         self.time_step = 0
         self.buffer_size = 0
         self.delta_eps = (self.epsilon - self.end_epsilon) / learning_time
-        self.sess = tf.InteractiveSession()
         if self.PRIORITIZED_XP_REPLAY:
             # It is the sum of the priorities of all transitions.
             # Agent maintains it just because it's inefficiently to compute that big sum at every step
@@ -64,20 +61,18 @@ class GameAgent:
 
         # Networks initializing
         print 'Online-network initializing...'
-        self.online_network = NN.QNeuralNetwork('Online-net', state_dim, action_dim, sess=self.sess,
-                                                batch_size=batch_size,
+        self.online_network = NN.QNeuralNetwork(state_dim, action_dim, batch_size=batch_size,
                                                 learning_rate=learning_rate, DUELING_ARCHITECTURE=DUELING_ARCHITECTURE)
         print 'Frozen-network initializing...'
-        self.frozen_network = NN.QNeuralNetwork('Frozen-net', state_dim, action_dim, sess=self.sess,
-                                                batch_size=batch_size,
+        self.frozen_network = NN.QNeuralNetwork(state_dim, action_dim, batch_size=batch_size,
                                                 learning_rate=learning_rate, DUELING_ARCHITECTURE=DUELING_ARCHITECTURE)
 
-        self.sess.run(tf.initialize_all_variables())
-        self.saver = tf.train.Saver(tf.all_variables())
         # Try to load weights if we made an agent for our task before
         try:
             print "Try to load networks from files..."
-            self.load_agent()
+            self.online_network.model.load_weights('{}.h5'.format(self.save_name))
+            self.frozen_network.model.load_weights('{}.h5'.format(self.save_name))
+            print "Networks are loaded from {}.h5".format(self.save_name)
         except:
             print "Training a new model"
 
@@ -122,7 +117,8 @@ class GameAgent:
         # Back up weights if time has come...
         if self.time_step % self.backup_steps == 0:
             # print 'Backing up networks...'
-            self.update_target_network()
+            self.online_network.model.save_weights('{}.h5'.format(self.save_name), True)
+            self.frozen_network.model.set_weights(np.copy(self.online_network.model.get_weights()))
             print 'Networks are backed up!'
 
         # Add transition to experience
@@ -186,13 +182,18 @@ class GameAgent:
         # Compute the target for network
         # If done=1, so next state is terminal and target q-value is equal to reward
         y_batch = (reward_batch + (1 - done_batch) * self.gamma * q_max_batch)
+
+        # Reshape for QNeuralNetwork's functions
+        y_batch = y_batch.reshape((self.batch_size, 1))
+        action_batch = action_batch.reshape((self.batch_size, 1))
+        state_batch = state_batch.reshape((self.batch_size,) + self.state_dim)
         if self.PRIORITIZED_XP_REPLAY:
             # Compute the weights for weighted update
             weights_batch = (self.buffer_size * prob_batch) ** -self.beta
             # Normalize weights by their's maximum
             weights_batch /= weights_batch.max()
             # Get info from Q-network and make train_step
-            cost, error = self.online_network.train_step(y_batch, state_batch, action_batch, weights_batch)
+            cost, error, Qs = self.online_network.train_step(y_batch, state_batch, action_batch, weights_batch)
 
             # Change the priorities of transitions we trained
             for i in range(self.batch_size):
@@ -202,34 +203,8 @@ class GameAgent:
                 # Try to refresh max_prior
             self.max_prior = np.max(self.experience_prob)
         else:
-            cost, error = self.online_network.train_step(y_batch, state_batch, action_batch)
+            cost = self.online_network.train_step(y_batch, state_batch, action_batch)[0]
 
         # Sometimes agent prints the cost value of batch
         if self.time_step % self.debug_steps == 0:
             print "Cost for the batch:" + str(cost), self.epsilon, np.mean(output_frozen)
-
-    def save_agent(self, name='DQN_w'):
-        if not os.path.exists(name + '/'):
-            os.makedirs(name + '/')
-        self.saver.save(self.sess, name + '/model.ckpt',
-                        global_step=self.time_step + 1)
-
-    def load_agent(self, name='DQN_w'):
-        ckpt = tf.train.get_checkpoint_state(name + '/')
-        if ckpt and ckpt.model_checkpoint_path:
-            self.saver.restore(self.sess, ckpt.model_checkpoint_path)
-            print 'found a checkpoint'
-        else:
-            print 'no checkpoints founded'
-
-    def update_target_network(self):
-        e1_params = [t for t in tf.trainable_variables() if t.name.startswith('Online-net')]
-        e1_params = sorted(e1_params, key=lambda v: v.name)
-        e2_params = [t for t in tf.trainable_variables() if t.name.startswith('Frozen-net')]
-        e2_params = sorted(e2_params, key=lambda v: v.name)
-        update_ops = []
-        for e1_v, e2_v in zip(e1_params, e2_params):
-            op = e2_v.assign(e1_v)
-            update_ops.append(op)
-        self.save_agent()
-        self.sess.run(update_ops)

@@ -16,10 +16,10 @@ print state_dim
 action_dim = env.action_space.n
 print action_dim
 if ATARI:
-    state_shape = (105, 80, 4)
+    state_shape = (4, 105, 80)
 else:
     state_shape = state_dim
-agent = AI.GameAgent(state_shape, action_dim, gamma=0.99, buffer_max_size=30000, save_name=ENV_NAME,
+agent = AI.GameAgent(state_shape, action_dim, gamma=0.99, buffer_max_size=25000, save_name=ENV_NAME,
                      PRIORITIZED_XP_REPLAY=False, DOUBLE_NETWORK=False, backup_steps=20000, debug_steps=100,
                      learning_rate=0.1, DUELING_ARCHITECTURE=False, batch_size=32, learning_time=1000000,
                      train_every_steps=4)
@@ -43,10 +43,10 @@ def atari_prep(img):
 # Make next 4-images concatenation by shifting old images
 def next_buf(buffer, gray):
     buf = np.copy(buffer)
-    buf[:, :, 0] = np.copy(buf[:, :, 1])
-    buf[:, :, 1] = np.copy(buf[:, :, 2])
-    buf[:, :, 2] = np.copy(buf[:, :, 3])
-    buf[:, :, 3] = np.copy(gray)
+    buf[0, :, :] = np.copy(buf[1, :, :])
+    buf[1, :, :] = np.copy(buf[2, :, :])
+    buf[2, :, :] = np.copy(buf[3, :, :])
+    buf[3, :, :] = np.copy(gray)
     del buffer
     return buf
 
@@ -59,7 +59,7 @@ for episode in xrange(GAMES_LIMIT):
             state = env.reset()
 
             if ATARI:
-                this_buf = np.zeros(state_shape)
+                this_buf = np.zeros((4, 105, 80))
                 this_buf = next_buf(this_buf, atari_prep(state))
 
             for _ in xrange(MAX_LEN):
@@ -84,7 +84,7 @@ for episode in xrange(GAMES_LIMIT):
     state = env.reset()
 
     if ATARI:
-        this_buf = np.zeros(state_shape)
+        this_buf = np.zeros((4, 105, 80))
         this_buf = next_buf(this_buf, atari_prep(state))
 
     # Train
@@ -108,7 +108,7 @@ for episode in xrange(GAMES_LIMIT):
 
         else:
             agent.memorize(np.copy(state), action, float(reward), done)
-        if agent.time_step % 1000 == 1 and index >= 10:
+        if agent.time_step % 1000 == 1:
             print agent.time_step
         total_reward += reward
         state = np.copy(next_state)
