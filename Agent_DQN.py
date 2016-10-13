@@ -36,7 +36,7 @@ class GameAgent:
         self.gamma = gamma
         self.batch_size = batch_size
         self.epsilon = 1.0
-        self.end_epsilon = 0.01
+        self.end_epsilon = 0.1
         self.state_dim = state_dim
         self.action_dim = action_dim
         self.debug_steps = debug_steps
@@ -48,6 +48,7 @@ class GameAgent:
         self.time_step = 0
         self.buffer_size = 0
         self.delta_eps = (self.epsilon - self.end_epsilon) / learning_time
+        self.last_q = 0
         if self.PRIORITIZED_XP_REPLAY:
             # It is the sum of the priorities of all transitions.
             # Agent maintains it just because it's inefficiently to compute that big sum at every step
@@ -68,16 +69,19 @@ class GameAgent:
                                                 learning_rate=learning_rate, DUELING_ARCHITECTURE=DUELING_ARCHITECTURE)
 
         # Try to load weights if we made an agent for our task before
+
         try:
             print "Try to load networks from files..."
             self.online_network.model.load_weights('{}.h5'.format(self.save_name))
             self.frozen_network.model.load_weights('{}.h5'.format(self.save_name))
+            self.time_step = np.load(self.save_name + '_step.npy')[0]
             print "Networks are loaded from {}.h5".format(self.save_name)
         except:
             print "Training a new model"
 
         print 'Networks initialized.'
-
+        self.epsilon = 1 - (1 - self.end_epsilon) * min(1, max(0, float(
+            self.time_step - self.n_observe)) / self.learning_time)
         # Initializing of experience buffer
         self.experience_state = np.zeros((self.buffer_max_size,) + self.state_dim, dtype='float32') * 1.0
         self.experience_action = np.zeros(self.buffer_max_size) * 1.0
@@ -92,9 +96,11 @@ class GameAgent:
         # print self.online_network.get_output(state)[:self.action_dim]
         return act
 
-    def e_greedy_action(self, state):
+    def e_greedy_action(self, state, epsilon=None):
         # This is a function for environment-agent interaction
-        if np.random.rand() <= self.epsilon:
+        if epsilon is None:
+            epsilon = self.epsilon
+        if np.random.rand() <= epsilon:
             return np.random.randint(self.action_dim)
         else:
             return self.greedy_action(state)
@@ -118,6 +124,7 @@ class GameAgent:
         if self.time_step % self.backup_steps == 0:
             # print 'Backing up networks...'
             self.online_network.model.save_weights('{}.h5'.format(self.save_name), True)
+            np.save(self.save_name + '_step', [self.time_step])
             self.frozen_network.model.set_weights(np.copy(self.online_network.model.get_weights()))
             print 'Networks are backed up!'
 
@@ -133,12 +140,12 @@ class GameAgent:
                 self.sum_prior -= self.experience_prob[self.time_step % self.buffer_max_size]
                 self.experience_prob[self.time_step % self.buffer_max_size] = 0
             # Make a train_step if buffer is filled enough
-            if self.time_step > self.buffer_max_size / 2 and self.time_step % self.train_every_steps == 0:
+            if self.buffer_size > self.buffer_max_size / 2 and self.time_step % self.train_every_steps == 0:
                 self.train_step()
 
         # Reduce epsilon
         if self.n_observe < self.time_step < self.learning_time + self.n_observe:
-            self.epsilon -= (1 - 0.01) / self.learning_time
+            self.epsilon -= (1 - self.end_epsilon) / self.learning_time
 
         # Set max_prior to new transition after train_step
         if self.PRIORITIZED_XP_REPLAY:
@@ -162,12 +169,14 @@ class GameAgent:
             indexes_batch = indexes_batch + (indexes_batch >= self.time_step % self.buffer_max_size).astype('int32')
 
         # Get batch of transitions
+
         state_batch = self.experience_state[indexes_batch]
         action_batch = self.experience_action[indexes_batch]
         reward_batch = self.experience_reward[indexes_batch]
         # There is a simple trick to get "next_state" from next transition
         next_state_batch = self.experience_state[(indexes_batch + 1) % self.buffer_size]
         done_batch = self.experience_done[indexes_batch]
+
         if self.PRIORITIZED_XP_REPLAY:
             prob_batch = self.experience_prob[indexes_batch]
 
@@ -207,4 +216,6 @@ class GameAgent:
 
         # Sometimes agent prints the cost value of batch
         if self.time_step % self.debug_steps == 0:
-            print "Cost for the batch:" + str(cost), self.epsilon, np.mean(output_frozen)
+            print "Cost for the batch:" + str(cost), self.epsilon, np.mean(output_frozen), np.mean(
+                output_frozen) - self.last_q
+        self.last_q = np.mean(output_frozen)

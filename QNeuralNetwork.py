@@ -3,13 +3,9 @@ from keras import backend as Theano
 from keras.layers import Dense, Input, Convolution2D, Flatten, merge
 from keras.layers.normalization import BatchNormalization
 from keras.models import Model
-from keras.optimizers import Adadelta, RMSprop, Adam
+from keras.optimizers import Adadelta, RMSprop, Adam,SGD
 from keras.regularizers import l1, l2
 from keras.initializations import normal
-
-
-def my_init(shape, name=None):
-    return normal(shape, scale=0.0001, name=name)
 
 
 class QNeuralNetwork:
@@ -24,6 +20,7 @@ class QNeuralNetwork:
         self.l3 = Convolution2D(64, 3, 3, activation='relu', subsample=(1, 1), border_mode='same')(self.l2)
         # self.l3bn = BatchNormalization()(self.l3)
         self.h = Flatten()(self.l3)
+
         if self.DUELING_ARCHITECTURE:
             self.hida = Dense(256, activation='relu')(self.h)
             self.hidv = Dense(256, activation='relu')(self.h)
@@ -31,7 +28,7 @@ class QNeuralNetwork:
             self.a = Dense(self.action_dim)(self.hida)
             self.q = merge([self.a, self.v], mode='concat')
         else:
-            self.hid = Dense(128, activation='relu')(self.h)
+            self.hid = Dense(512, activation='relu')(self.h)
             self.q = Dense(self.action_dim)(self.hid)
         self.model = Model(self.state_in, self.q)
 
@@ -92,9 +89,9 @@ class QNeuralNetwork:
         # Compute TD-error
         self.error = (self.q_output - self.target.reshape((self.batch_size,)))
         # Make a MSE-cost function
-        self.cost = (self.weights * (self.error ** 2)).mean()
+        self.cost = Theano.sum((self.weights * (self.error ** 2)) / self.batch_size)
         # Initialize an optimizer
-        self.opt = Adam(lr=self.learning_rate)
+        self.opt = SGD(lr=self.learning_rate,nesterov=True,momentum=0.8)
         self.params = self.model.trainable_weights
         self.updates = self.opt.get_updates(self.params, [], self.cost)
 

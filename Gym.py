@@ -4,6 +4,7 @@ import gym
 import numpy as np
 import time
 import Agent_DQN as AI
+import cv2
 
 ENV_NAME = 'Pong-v0'
 np.set_printoptions(threshold=np.inf)
@@ -19,9 +20,9 @@ if ATARI:
     state_shape = (4, 105, 80)
 else:
     state_shape = state_dim
-agent = AI.GameAgent(state_shape, action_dim, gamma=0.99, buffer_max_size=25000, save_name=ENV_NAME,
-                     PRIORITIZED_XP_REPLAY=False, DOUBLE_NETWORK=False, backup_steps=20000, debug_steps=100,
-                     learning_rate=0.1, DUELING_ARCHITECTURE=False, batch_size=32, learning_time=1000000,
+agent = AI.GameAgent(state_shape, action_dim, gamma=0.99, buffer_max_size=20000, save_name=ENV_NAME + '_sgd',
+                     PRIORITIZED_XP_REPLAY=False, DOUBLE_NETWORK=False, backup_steps=10000, debug_steps=100,
+                     learning_rate=0.001, DUELING_ARCHITECTURE=False, batch_size=32, learning_time=1000000,
                      train_every_steps=4)
 EPISODES_TO_TEST = 1
 GAMES_LIMIT = 500000
@@ -30,14 +31,10 @@ MAX_LEN = 1000000
 
 # Preprocessing for atari
 def atari_prep(img):
-    # print img
-    r = img[:, :, 0]
-    g = img[:, :, 1]
-    b = img[:, :, 2]
-    gray = 0.2989 * r + 0.587 * g + 0.114 * b
-    del r, g, b
-    gray = imresize(gray, (105, 80)) / 255.
-    return gray.astype('float32')
+    img = cv2.cvtColor(cv2.resize(img, (105, 80)),
+                       cv2.COLOR_RGB2GRAY)
+    img = np.transpose((img / 255.).astype(np.float32))
+    return img
 
 
 # Make next 4-images concatenation by shifting old images
@@ -53,21 +50,21 @@ def next_buf(buffer, gray):
 
 for episode in xrange(GAMES_LIMIT):
     # Test every 30 episodes
-    if episode % 15 == 0 and episode > 100:
+    if episode % 15 == 0 and episode > -1:
         total_reward = 0
         for i in xrange(EPISODES_TO_TEST):
             state = env.reset()
 
             if ATARI:
-                this_buf = np.zeros((4, 105, 80))
+                this_buf = np.zeros(state_shape)
                 this_buf = next_buf(this_buf, atari_prep(state))
 
             for _ in xrange(MAX_LEN):
                 env.render()
                 if ATARI:
-                    action = agent.greedy_action([this_buf])
+                    action = agent.e_greedy_action([this_buf],0.05)
                 else:
-                    action = agent.greedy_action([state])
+                    action = agent.e_greedy_action([state],0.05)
                 next_state, reward, done, _ = env.step(action)
                 state = np.copy(next_state)
 
@@ -84,7 +81,7 @@ for episode in xrange(GAMES_LIMIT):
     state = env.reset()
 
     if ATARI:
-        this_buf = np.zeros((4, 105, 80))
+        this_buf = np.zeros(state_shape)
         this_buf = next_buf(this_buf, atari_prep(state))
 
     # Train
@@ -95,13 +92,16 @@ for episode in xrange(GAMES_LIMIT):
     for _ in xrange(MAX_LEN):
 
         if ATARI:
-            action = agent.action([this_buf], episode)
+            if index < 30:
+                action = agent.action([this_buf], episode)
+            else:
+                action = np.random.randint(action_dim)
         else:
             action = agent.action([state], episode)
 
         next_state, reward, done, info = env.step(action)
         if ATARI:
-            if index >= 10:  # Because this_buf contains last 4 frames
+            if index >= 5:  # Because this_buf contains last 4 frames
                 agent.memorize(np.copy(this_buf), action, float(reward) * 10, done)
 
             this_buf = next_buf(this_buf, atari_prep(next_state))
