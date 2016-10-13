@@ -140,7 +140,7 @@ class GameAgent:
                 self.sum_prior -= self.experience_prob[self.time_step % self.buffer_max_size]
                 self.experience_prob[self.time_step % self.buffer_max_size] = 0
             # Make a train_step if buffer is filled enough
-            if self.buffer_size > self.buffer_max_size / 2 and self.time_step % self.train_every_steps == 0:
+            if self.buffer_size > self.buffer_max_size/2 and self.time_step % self.train_every_steps == 0:
                 self.train_step()
 
         # Reduce epsilon

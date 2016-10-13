@@ -28,7 +28,7 @@ class QNeuralNetwork:
             self.a = Dense(self.action_dim)(self.hida)
             self.q = merge([self.a, self.v], mode='concat')
         else:
-            self.hid = Dense(512, activation='relu')(self.h)
+            self.hid = Dense(128, activation='relu')(self.h)
             self.q = Dense(self.action_dim)(self.hid)
         self.model = Model(self.state_in, self.q)
 
@@ -64,7 +64,7 @@ class QNeuralNetwork:
         self.DUELING_ARCHITECTURE = DUELING_ARCHITECTURE
         # Create input for training
         self.actions = Input(shape=(self.batch_size,), dtype='int32')
-        self.target = Input(shape=(self.batch_size,), dtype='int32')
+        self.target = Input(shape=(self.batch_size,), dtype='float32')
         self.weights = Input(shape=(self.batch_size,), dtype='float32')  # These weights are for weighted update
 
         # Initialize model
@@ -91,7 +91,7 @@ class QNeuralNetwork:
         # Make a MSE-cost function
         self.cost = Theano.sum((self.weights * (self.error ** 2)) / self.batch_size)
         # Initialize an optimizer
-        self.opt = SGD(lr=self.learning_rate,nesterov=True,momentum=0.8)
+        self.opt = Adadelta(lr=self.learning_rate)
         self.params = self.model.trainable_weights
         self.updates = self.opt.get_updates(self.params, [], self.cost)
 

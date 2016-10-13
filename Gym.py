@@ -1,5 +1,3 @@
-from scipy.misc import imresize
-
 import gym
 import numpy as np
 import time
@@ -17,13 +15,13 @@ print state_dim
 action_dim = env.action_space.n
 print action_dim
 if ATARI:
-    state_shape = (4, 105, 80)
+    state_shape = (4, 80, 80)
 else:
     state_shape = state_dim
-agent = AI.GameAgent(state_shape, action_dim, gamma=0.99, buffer_max_size=20000, save_name=ENV_NAME + '_sgd',
+agent = AI.GameAgent(state_shape, action_dim, gamma=0.99, buffer_max_size=50000, save_name=ENV_NAME + '_adadelta',
                      PRIORITIZED_XP_REPLAY=False, DOUBLE_NETWORK=False, backup_steps=10000, debug_steps=100,
-                     learning_rate=0.001, DUELING_ARCHITECTURE=False, batch_size=32, learning_time=1000000,
-                     train_every_steps=4)
+                     learning_rate=1., DUELING_ARCHITECTURE=False, batch_size=32, learning_time=1000000,
+                     train_every_steps=2)
 EPISODES_TO_TEST = 1
 GAMES_LIMIT = 500000
 MAX_LEN = 1000000
@@ -31,7 +29,7 @@ MAX_LEN = 1000000
 
 # Preprocessing for atari
 def atari_prep(img):
-    img = cv2.cvtColor(cv2.resize(img, (105, 80)),
+    img = cv2.cvtColor(cv2.resize(img, (80, 80)),
                        cv2.COLOR_RGB2GRAY)
     img = np.transpose((img / 255.).astype(np.float32))
     return img
@@ -50,7 +48,7 @@ def next_buf(buffer, gray):
 
 for episode in xrange(GAMES_LIMIT):
     # Test every 30 episodes
-    if episode % 15 == 0 and episode > -1:
+    if episode % 15 == 0 and episode > 100:
         total_reward = 0
         for i in xrange(EPISODES_TO_TEST):
             state = env.reset()
@@ -72,7 +70,6 @@ for episode in xrange(GAMES_LIMIT):
                     this_buf = next_buf(this_buf, atari_prep(next_state))
 
                 total_reward += reward
-                time.sleep(0.0001)
                 if done:
                     break
         ave_reward = total_reward / EPISODES_TO_TEST
@@ -92,7 +89,7 @@ for episode in xrange(GAMES_LIMIT):
     for _ in xrange(MAX_LEN):
 
         if ATARI:
-            if index < 30:
+            if index > 20:
                 action = agent.action([this_buf], episode)
             else:
                 action = np.random.randint(action_dim)
