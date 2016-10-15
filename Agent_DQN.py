@@ -1,5 +1,6 @@
 import numpy as np
 import QNeuralNetwork as NN
+import os
 
 
 class GameAgent:
@@ -72,9 +73,9 @@ class GameAgent:
 
         try:
             print "Try to load networks from files..."
-            self.online_network.model.load_weights('{}.h5'.format(self.save_name))
-            self.frozen_network.model.load_weights('{}.h5'.format(self.save_name))
-            self.time_step = np.load(self.save_name + '_step.npy')[0]
+            self.online_network.model.load_weights(self.save_name + '/weights.h5')
+            self.frozen_network.model.load_weights(self.save_name + '/weights.h5')
+            self.time_step = np.load(self.save_name + '/step.npy')[0]
             print "Networks are loaded from {}.h5".format(self.save_name)
         except:
             print "Training a new model"
@@ -83,7 +84,7 @@ class GameAgent:
         self.epsilon = 1 - (1 - self.end_epsilon) * min(1, max(0, float(
             self.time_step - self.n_observe)) / self.learning_time)
         # Initializing of experience buffer
-        self.experience_state = np.zeros((self.buffer_max_size,) + self.state_dim, dtype='float32') * 1.0
+        self.experience_state = np.zeros((self.buffer_max_size,) + self.state_dim, dtype=np.int8) + 1
         self.experience_action = np.zeros(self.buffer_max_size) * 1.0
         self.experience_reward = np.zeros(self.buffer_max_size) * 1.0
         self.experience_done = np.zeros(self.buffer_max_size) * 1.0
@@ -123,8 +124,11 @@ class GameAgent:
         # Back up weights if time has come...
         if self.time_step % self.backup_steps == 0:
             # print 'Backing up networks...'
-            self.online_network.model.save_weights('{}.h5'.format(self.save_name), True)
-            np.save(self.save_name + '_step', [self.time_step])
+            directory = self.save_name + '/'
+            if not os.path.exists(directory):
+                os.makedirs(directory)
+            self.online_network.model.save_weights(directory + 'weights.h5', True)
+            np.save(directory + 'step', [self.time_step])
             self.frozen_network.model.set_weights(np.copy(self.online_network.model.get_weights()))
             print 'Networks are backed up!'
 
@@ -140,7 +144,7 @@ class GameAgent:
                 self.sum_prior -= self.experience_prob[self.time_step % self.buffer_max_size]
                 self.experience_prob[self.time_step % self.buffer_max_size] = 0
             # Make a train_step if buffer is filled enough
-            if self.buffer_size > self.buffer_max_size/2 and self.time_step % self.train_every_steps == 0:
+            if self.buffer_size > min(self.buffer_max_size / 2, 50000) and self.time_step % self.train_every_steps == 0:
                 self.train_step()
 
         # Reduce epsilon
@@ -165,16 +169,18 @@ class GameAgent:
             # print indexes_batch
         else:
             # Sample transitions and avoid the last memorized transition
-            indexes_batch = np.random.choice(range(self.buffer_size - 1), self.batch_size, replace=False)
+            indexes_batch = np.random.randint(0,self.buffer_size - 1, self.batch_size)
             indexes_batch = indexes_batch + (indexes_batch >= self.time_step % self.buffer_max_size).astype('int32')
 
         # Get batch of transitions
 
         state_batch = self.experience_state[indexes_batch]
+        state_batch = np.copy(state_batch) / 255.
         action_batch = self.experience_action[indexes_batch]
         reward_batch = self.experience_reward[indexes_batch]
         # There is a simple trick to get "next_state" from next transition
         next_state_batch = self.experience_state[(indexes_batch + 1) % self.buffer_size]
+        next_state_batch = np.copy(next_state_batch) / 255.
         done_batch = self.experience_done[indexes_batch]
 
         if self.PRIORITIZED_XP_REPLAY:
@@ -212,7 +218,7 @@ class GameAgent:
                 # Try to refresh max_prior
             self.max_prior = np.max(self.experience_prob)
         else:
-            cost = self.online_network.train_step(y_batch, state_batch, action_batch)[0]
+            cost, _, _ = self.online_network.train_step(y_batch, state_batch, action_batch)
 
         # Sometimes agent prints the cost value of batch
         if self.time_step % self.debug_steps == 0:

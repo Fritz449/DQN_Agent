@@ -3,7 +3,7 @@ from keras import backend as Theano
 from keras.layers import Dense, Input, Convolution2D, Flatten, merge
 from keras.layers.normalization import BatchNormalization
 from keras.models import Model
-from keras.optimizers import Adadelta, RMSprop, Adam,SGD
+from keras.optimizers import Adadelta, RMSprop, Adam, SGD
 from keras.regularizers import l1, l2
 from keras.initializations import normal
 
@@ -91,7 +91,7 @@ class QNeuralNetwork:
         # Make a MSE-cost function
         self.cost = Theano.sum((self.weights * (self.error ** 2)) / self.batch_size)
         # Initialize an optimizer
-        self.opt = Adadelta(lr=self.learning_rate)
+        self.opt = RMSprop(lr=self.learning_rate)
         self.params = self.model.trainable_weights
         self.updates = self.opt.get_updates(self.params, [], self.cost)
 
