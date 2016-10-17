@@ -31,7 +31,7 @@ MAX_LEN = 1000000
 def atari_prep(img):
     img = cv2.cvtColor(cv2.resize(img, (80, 80)),
                        cv2.COLOR_RGB2GRAY)
-    img = np.transpose(img.astype(np.int8))
+    img = np.transpose(img.astype(np.uint8))
     return img
 
 
@@ -49,24 +49,24 @@ def next_buf(buffer, gray):
 for episode in xrange(GAMES_LIMIT):
     # Test every 30 episodes
     index = 0
-    if episode % 100 == 0 and agent.time_step > 0:
+    if episode % 100 == 0 and episode > 0:
         total_reward = 0
         for i in xrange(EPISODES_TO_TEST):
             state = env.reset()
 
             if ATARI:
-                this_buf = np.zeros(state_shape, dtype=np.int8)
+                this_buf = np.zeros(state_shape, dtype=np.uint8)
                 this_buf = next_buf(this_buf, atari_prep(state))
 
             for _ in xrange(MAX_LEN):
                 env.render()
                 if ATARI:
                     if index > 30:
-                        action = agent.e_greedy_action([np.copy(this_buf)/255.], 0.01)
+                        action = agent.e_greedy_action([np.copy(this_buf)/255.], 0.05)
                     else:
                         action = np.random.randint(action_dim)
                 else:
-                    action = agent.e_greedy_action([state], 0.01)
+                    action = agent.e_greedy_action([state], 0.04)
                 next_state, reward, done, _ = env.step(action)
                 state = np.copy(next_state)
 
@@ -83,7 +83,7 @@ for episode in xrange(GAMES_LIMIT):
     state = env.reset()
 
     if ATARI:
-        this_buf = np.zeros(state_shape)
+        this_buf = np.zeros(state_shape, dtype=np.uint8)
         this_buf = next_buf(this_buf, atari_prep(state))
 
     # Train

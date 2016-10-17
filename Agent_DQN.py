@@ -84,10 +84,11 @@ class GameAgent:
         self.epsilon = 1 - (1 - self.end_epsilon) * min(1, max(0, float(
             self.time_step - self.n_observe)) / self.learning_time)
         # Initializing of experience buffer
-        self.experience_state = np.zeros((self.buffer_max_size,) + self.state_dim, dtype=np.int8) + 1
+        self.experience_state = np.zeros((self.buffer_max_size,) + self.state_dim, dtype=np.uint8) + 1
         self.experience_action = np.zeros(self.buffer_max_size) * 1.0
         self.experience_reward = np.zeros(self.buffer_max_size) * 1.0
         self.experience_done = np.zeros(self.buffer_max_size) * 1.0
+        self.buffer_last = 0
         if self.PRIORITIZED_XP_REPLAY:
             self.experience_prob = np.zeros(self.buffer_max_size) * 1.0
 
@@ -104,11 +105,14 @@ class GameAgent:
         if np.random.rand() <= epsilon:
             return np.random.randint(self.action_dim)
         else:
-            return self.greedy_action(state)
+            qs = self.online_network.get_output(state)[:self.action_dim]
+            if epsilon == 0.04:
+                print qs
+            return np.argmax(qs)
 
     def action(self, state, episode):
-        if episode % 100 == 0:
-            return self.e_greedy_action(state)
+        if episode % 3 == 0:
+            return self.e_greedy_action(state,0.05)
         else:
             return self.e_greedy_action(state)
 
@@ -133,16 +137,15 @@ class GameAgent:
             print 'Networks are backed up!'
 
         # Add transition to experience
-        self.experience_state[self.time_step % self.buffer_max_size] = np.copy(state)
-        self.experience_reward[self.time_step % self.buffer_max_size] = reward
-        self.experience_action[self.time_step % self.buffer_max_size] = action
-        self.experience_done[self.time_step % self.buffer_max_size] = terminal
-
+        self.experience_state[self.buffer_last] = np.copy(state)
+        self.experience_reward[self.buffer_last] = reward
+        self.experience_action[self.buffer_last] = action
+        self.experience_done[self.buffer_last] = terminal
         if train_step:
             # Set prior=0 to last transition because we don't want to optimize it
             if self.PRIORITIZED_XP_REPLAY:
-                self.sum_prior -= self.experience_prob[self.time_step % self.buffer_max_size]
-                self.experience_prob[self.time_step % self.buffer_max_size] = 0
+                self.sum_prior -= self.experience_prob[self.buffer_last]
+                self.experience_prob[self.buffer_last] = 0
             # Make a train_step if buffer is filled enough
             if self.buffer_size > min(self.buffer_max_size / 2, 50000) and self.time_step % self.train_every_steps == 0:
                 self.train_step()
@@ -154,9 +157,10 @@ class GameAgent:
         # Set max_prior to new transition after train_step
         if self.PRIORITIZED_XP_REPLAY:
             self.sum_prior += self.max_prior
-            self.experience_prob[self.time_step % self.buffer_max_size] = self.max_prior
+            self.experience_prob[self.buffer_last] = self.max_prior
         # Add 1 to buffer_size, restrict it by buffer_max_size
-        self.buffer_size += int(self.buffer_size < self.buffer_max_size)
+        self.buffer_last = (self.buffer_last + 1) % self.buffer_max_size
+        self.buffer_size = min(self.buffer_size+1,self.buffer_max_size)
         self.time_step += 1
 
     def train_step(self):
@@ -170,10 +174,8 @@ class GameAgent:
         else:
             # Sample transitions and avoid the last memorized transition
             indexes_batch = np.random.randint(0,self.buffer_size - 1, self.batch_size)
-            indexes_batch = indexes_batch + (indexes_batch >= self.time_step % self.buffer_max_size).astype('int32')
-
+            indexes_batch = indexes_batch + (indexes_batch >= self.buffer_last).astype('int32')
         # Get batch of transitions
-
         state_batch = self.experience_state[indexes_batch]
         state_batch = np.copy(state_batch) / 255.
         action_batch = self.experience_action[indexes_batch]
@@ -197,11 +199,12 @@ class GameAgent:
         # Compute the target for network
         # If done=1, so next state is terminal and target q-value is equal to reward
         y_batch = (reward_batch + (1 - done_batch) * self.gamma * q_max_batch)
-
+        #print y_batch
         # Reshape for QNeuralNetwork's functions
         y_batch = y_batch.reshape((self.batch_size, 1))
         action_batch = action_batch.reshape((self.batch_size, 1))
         state_batch = state_batch.reshape((self.batch_size,) + self.state_dim)
+
         if self.PRIORITIZED_XP_REPLAY:
             # Compute the weights for weighted update
             weights_batch = (self.buffer_size * prob_batch) ** -self.beta
@@ -218,10 +221,11 @@ class GameAgent:
                 # Try to refresh max_prior
             self.max_prior = np.max(self.experience_prob)
         else:
-            cost, _, _ = self.online_network.train_step(y_batch, state_batch, action_batch)
+            cost, er,q,qs = self.online_network.train_step(y_batch, state_batch, action_batch)
+
 
         # Sometimes agent prints the cost value of batch
         if self.time_step % self.debug_steps == 0:
             print "Cost for the batch:" + str(cost), self.epsilon, np.mean(output_frozen), np.mean(
                 output_frozen) - self.last_q
-        self.last_q = np.mean(output_frozen)
+            self.last_q = np.mean(output_frozen)
