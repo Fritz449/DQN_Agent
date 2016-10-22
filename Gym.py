@@ -4,7 +4,7 @@ import time
 import Agent_DQN as AI
 import cv2
 
-ENV_NAME = 'Pong-v0'
+ENV_NAME = 'Breakout-v0'
 np.set_printoptions(threshold=np.inf)
 env = gym.make(ENV_NAME)
 
@@ -29,9 +29,10 @@ MAX_LEN = 1000000
 
 # Preprocessing for atari
 def atari_prep(img):
-    img = cv2.cvtColor(cv2.resize(img, (80, 80)),
-                       cv2.COLOR_RGB2GRAY)
+    img = cv2.resize(cv2.cvtColor(img,
+                                  cv2.COLOR_RGB2GRAY), (80, 80))
     img = np.transpose(img.astype(np.uint8))
+
     return img
 
 
@@ -46,11 +47,14 @@ def next_buf(buffer, gray):
     return buf
 
 
+sum = 0
 for episode in xrange(GAMES_LIMIT):
     # Test every 30 episodes
     index = 0
+
     if episode % 100 == 0 and episode > 0:
         total_reward = 0
+
         for i in xrange(EPISODES_TO_TEST):
             state = env.reset()
 
@@ -62,7 +66,7 @@ for episode in xrange(GAMES_LIMIT):
                 env.render()
                 if ATARI:
                     if index > 30:
-                        action = agent.e_greedy_action([np.copy(this_buf)/255.], 0.05)
+                        action = agent.e_greedy_action([np.copy(this_buf) / 255.], 0.04)
                     else:
                         action = np.random.randint(action_dim)
                 else:
@@ -79,6 +83,8 @@ for episode in xrange(GAMES_LIMIT):
                     break
         ave_reward = total_reward / EPISODES_TO_TEST
         print 'episode: ', episode, 'Average Reward:', ave_reward
+        print 'Mean total scores of the train episodes is ', float(sum)/100
+        sum = 0
 
     state = env.reset()
 
@@ -95,7 +101,7 @@ for episode in xrange(GAMES_LIMIT):
 
         if ATARI:
             if index > 30:
-                action = agent.action([np.copy(this_buf)/255.], episode)
+                action = agent.action([np.copy(this_buf) / 255.], episode)
             else:
                 action = np.random.randint(action_dim)
         else:
@@ -103,7 +109,7 @@ for episode in xrange(GAMES_LIMIT):
 
         next_state, reward, done, info = env.step(action)
         if ATARI:
-            if index >= 5:  # Because this_buf contains last 4 frames
+            if index >= 30:  # Because this_buf contains last 4 frames
                 agent.memorize(np.copy(this_buf), action, float(reward), done)
 
             this_buf = next_buf(this_buf, atari_prep(next_state))
@@ -113,10 +119,12 @@ for episode in xrange(GAMES_LIMIT):
         if agent.time_step % 1000 == 1:
             print agent.time_step
         total_reward += reward
+
         state = np.copy(next_state)
         index += 1
         if done:
             break
+    sum += total_reward
 
     if episode % 1 == 0:
         print 'Reward of episode ' + str(episode) + ' is ' + str(total_reward)

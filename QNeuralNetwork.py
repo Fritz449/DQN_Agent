@@ -5,33 +5,37 @@ from keras.layers.normalization import BatchNormalization
 from keras.models import Model
 from keras.optimizers import Adadelta, RMSprop, Adam, SGD
 from keras.regularizers import l1, l2
-from keras.initializations import normal
+from keras.initializations import normal, glorot_uniform
 
-def my_init(shape, name=None):
-    return normal(shape, scale=0.01, name=name)
+# def my_init(shape, name=None):
+#     return normal(shape, scale=0.01, name=name)
 
 class QNeuralNetwork:
     def create_model(self):
+        my_init = 'glorot_uniform'
         # This is the place where neural network model initialized
         self.state_in = Input(self.state_dim)
         # self.state_inp = BatchNormalization()(self.state_in)
-        self.l1 = Convolution2D(32, 8, 8, activation='relu',init=my_init, subsample=(4, 4), border_mode='same')(self.state_in)
+        self.l1 = Convolution2D(32, 8, 8, activation='relu', init=my_init, subsample=(4, 4), border_mode='same')(
+            self.state_in)
         # self.l1bn = BatchNormalization()(self.l1)
-        self.l2 = Convolution2D(64, 4, 4, activation='relu',init=my_init,subsample=(2, 2), border_mode='same')(self.l1)
+        self.l2 = Convolution2D(64, 4, 4, activation='relu', init=my_init, subsample=(2, 2), border_mode='same')(
+            self.l1)
         # self.l2bn = BatchNormalization()(self.l2)
-        self.l3 = Convolution2D(64, 3, 3, activation='relu',init=my_init, subsample=(1, 1), border_mode='same')(self.l2)
+        self.l3 = Convolution2D(64, 3, 3, activation='relu', init=my_init, subsample=(1, 1), border_mode='same')(
+            self.l2)
         # self.l3bn = BatchNormalization()(self.l3)
         self.h = Flatten()(self.l3)
 
         if self.DUELING_ARCHITECTURE:
-            self.hida = Dense(256, init=my_init,activation='relu')(self.h)
-            self.hidv = Dense(256, init=my_init,activation='relu')(self.h)
+            self.hida = Dense(256, init=my_init, activation='relu')(self.h)
+            self.hidv = Dense(256, init=my_init, activation='relu')(self.h)
             self.v = Dense(1)(self.hidv)
             self.a = Dense(self.action_dim)(self.hida)
             self.q = merge([self.a, self.v], mode='concat')
         else:
-            self.hid = Dense(512, init=my_init,activation='relu')(self.h)
-            self.q = Dense(self.action_dim,init=my_init)(self.hid)
+            self.hid = Dense(512, init=my_init, activation='relu')(self.h)
+            self.q = Dense(self.action_dim, init=my_init)(self.hid)
         self.model = Model(self.state_in, self.q)
 
     # def create_model(self):
@@ -92,17 +96,17 @@ class QNeuralNetwork:
         # Compute TD-error
         self.error = (self.q_output - self.target.reshape((self.batch_size,)))
         # Make a MSE-cost function
-        error_ = (self.weights * (self.error ** 2)) / self.batch_size
-        self.cost = Theano.sum(error_)
+        self.error_ = (self.weights * (self.error ** 2)) / self.batch_size
+        self.cost = Theano.sum(self.error_)
         # Initialize an optimizer
-        self.opt = RMSprop(lr=self.learning_rate,rho=0.95)
+        self.opt = RMSprop(lr=self.learning_rate,rho=0.95,epsilon=1e-6)
         self.params = self.model.trainable_weights
-        self.updates = self.opt.get_updates(self.params,[], self.cost)
+        self.updates = self.opt.get_updates(self.params, [], self.cost)
 
         # Make a function to update weights and get information about cost an TD-errors
         self.tr_step = Theano.function(
             [self.target, self.state_in, self.actions, self.weights],  # Input
-            [self.cost, self.error,self.q_output,self.Qs],  # Output when make a training step
+            [self.cost, self.error,  self.q_output, self.Qs,self.error_],  # Output when make a training step
             updates=self.updates)  # Update weights
 
     def get_output(self, state):

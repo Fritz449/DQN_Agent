@@ -1,6 +1,7 @@
 import numpy as np
 import QNeuralNetwork as NN
 import os
+import time
 
 
 class GameAgent:
@@ -50,6 +51,7 @@ class GameAgent:
         self.buffer_size = 0
         self.delta_eps = (self.epsilon - self.end_epsilon) / learning_time
         self.last_q = 0
+        self.sum_cost = 0
         if self.PRIORITIZED_XP_REPLAY:
             # It is the sum of the priorities of all transitions.
             # Agent maintains it just because it's inefficiently to compute that big sum at every step
@@ -112,7 +114,7 @@ class GameAgent:
 
     def action(self, state, episode):
         if episode % 3 == 0:
-            return self.e_greedy_action(state,0.05)
+            return self.e_greedy_action(state, 0.05)
         else:
             return self.e_greedy_action(state)
 
@@ -133,9 +135,13 @@ class GameAgent:
                 os.makedirs(directory)
             self.online_network.model.save_weights(directory + 'weights.h5', True)
             np.save(directory + 'step', [self.time_step])
+            print self.frozen_network.model
+            print np.sum(self.online_network.model.get_weights()[-1])
+            print np.sum(self.frozen_network.model.get_weights()[-1])
             self.frozen_network.model.set_weights(np.copy(self.online_network.model.get_weights()))
+            print np.sum(self.online_network.model.get_weights()[-1])
+            print np.sum(self.frozen_network.model.get_weights()[-1])
             print 'Networks are backed up!'
-
         # Add transition to experience
         self.experience_state[self.buffer_last] = np.copy(state)
         self.experience_reward[self.buffer_last] = reward
@@ -147,6 +153,7 @@ class GameAgent:
                 self.sum_prior -= self.experience_prob[self.buffer_last]
                 self.experience_prob[self.buffer_last] = 0
             # Make a train_step if buffer is filled enough
+
             if self.buffer_size > min(self.buffer_max_size / 2, 50000) and self.time_step % self.train_every_steps == 0:
                 self.train_step()
 
@@ -160,11 +167,10 @@ class GameAgent:
             self.experience_prob[self.buffer_last] = self.max_prior
         # Add 1 to buffer_size, restrict it by buffer_max_size
         self.buffer_last = (self.buffer_last + 1) % self.buffer_max_size
-        self.buffer_size = min(self.buffer_size+1,self.buffer_max_size)
+        self.buffer_size = min(self.buffer_size + 1, self.buffer_max_size)
         self.time_step += 1
 
     def train_step(self):
-
         if self.PRIORITIZED_XP_REPLAY:
             # Scale priority by sum of them
             probs = self.experience_prob / self.sum_prior
@@ -173,7 +179,7 @@ class GameAgent:
             # print indexes_batch
         else:
             # Sample transitions and avoid the last memorized transition
-            indexes_batch = np.random.randint(0,self.buffer_size - 1, self.batch_size)
+            indexes_batch = np.random.randint(0, self.buffer_size - 1, self.batch_size)
             indexes_batch = indexes_batch + (indexes_batch >= self.buffer_last).astype('int32')
         # Get batch of transitions
         state_batch = self.experience_state[indexes_batch]
@@ -184,7 +190,6 @@ class GameAgent:
         next_state_batch = self.experience_state[(indexes_batch + 1) % self.buffer_size]
         next_state_batch = np.copy(next_state_batch) / 255.
         done_batch = self.experience_done[indexes_batch]
-
         if self.PRIORITIZED_XP_REPLAY:
             prob_batch = self.experience_prob[indexes_batch]
 
@@ -199,7 +204,7 @@ class GameAgent:
         # Compute the target for network
         # If done=1, so next state is terminal and target q-value is equal to reward
         y_batch = (reward_batch + (1 - done_batch) * self.gamma * q_max_batch)
-        #print y_batch
+        # print y_batch
         # Reshape for QNeuralNetwork's functions
         y_batch = y_batch.reshape((self.batch_size, 1))
         action_batch = action_batch.reshape((self.batch_size, 1))
@@ -221,11 +226,14 @@ class GameAgent:
                 # Try to refresh max_prior
             self.max_prior = np.max(self.experience_prob)
         else:
-            cost, er,q,qs = self.online_network.train_step(y_batch, state_batch, action_batch)
+            st = time.time()
+            cost, er, q, qs, erq = self.online_network.train_step(y_batch, state_batch, action_batch)
 
 
         # Sometimes agent prints the cost value of batch
+        self.sum_cost += cost / self.debug_steps
         if self.time_step % self.debug_steps == 0:
             print "Cost for the batch:" + str(cost), self.epsilon, np.mean(output_frozen), np.mean(
-                output_frozen) - self.last_q
+                output_frozen) - self.last_q, self.sum_cost
+            self.sum_cost = 0
             self.last_q = np.mean(output_frozen)
