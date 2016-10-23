@@ -96,13 +96,13 @@ class QNeuralNetwork:
         # Compute TD-error
         self.error = (self.q_output - self.target.reshape((self.batch_size,)))
         # Make a MSE-cost function
-        self.error_ = (self.weights * (self.error ** 2)) / self.batch_size
+        self.error_ = (self.weights * (self.error ** 2))
         self.cost = Theano.sum(self.error_)
+        self.cost = Theano.clip(self.cost,0,1)
         # Initialize an optimizer
         self.opt = RMSprop(lr=self.learning_rate,rho=0.95,epsilon=1e-6)
         self.params = self.model.trainable_weights
         self.updates = self.opt.get_updates(self.params, [], self.cost)
-
         # Make a function to update weights and get information about cost an TD-errors
         self.tr_step = Theano.function(
             [self.target, self.state_in, self.actions, self.weights],  # Input
@@ -125,5 +125,4 @@ class QNeuralNetwork:
         """
         if weights is None:
             weights = np.ones((1, state_in.shape[0]))
-        weights = weights.reshape(1, state_in.shape[0])
         return self.tr_step([target, state_in, actions, weights])

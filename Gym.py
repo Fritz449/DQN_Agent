@@ -108,6 +108,7 @@ for episode in xrange(GAMES_LIMIT):
             action = agent.action([state], episode)
 
         next_state, reward, done, info = env.step(action)
+        reward = np.clip(reward,-1,1)
         if ATARI:
             if index >= 30:  # Because this_buf contains last 4 frames
                 agent.memorize(np.copy(this_buf), action, float(reward), done)
@@ -119,7 +120,6 @@ for episode in xrange(GAMES_LIMIT):
         if agent.time_step % 1000 == 1:
             print agent.time_step
         total_reward += reward
-
         state = np.copy(next_state)
         index += 1
         if done:
