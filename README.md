@@ -4,7 +4,7 @@
 Q-network class implemented via Keras using Theano.  
 Parameters: state/action dimensionality and batch size. They are initialized directly by agent.  
 Programmer can make a network by editing "create_model" method or use prepared model.  
-The network uses RMSpror optimizer with learning rate 0.0001 and optimizes MSE. 
+The network uses RMSpror optimizer with learning rate 0.00025 and optimizes SSE(SumSquaredError). 
 ### Agent_DQN.py 
 Agent class implementation.  
 This agent tries to approximate mapping from space of states  to space of q-values  using Q-network.  
@@ -64,11 +64,12 @@ You can read full article to get [full description of the idea here](https://arx
 
 ### Gym.py 
 Interaction with [Gym](https://gym.openai.com/) made my OpenAI.  
-There is an option to make a preprocessing of images: grayscale + rescale + 4-frames concatenation
-
+There is an option to make a preprocessing of images: grayscale + rescale + 4-frames concatenation  
+### ALE.py
+Interaction with [Arcade learning environment](http://www.arcadelearningenvironment.org/)  
 ## Dependencies:
 - **Numpy**
 - **Theano**
 - **Keras**
-- **Gym**
+- **Gym** or **ALE** 
 - **Scipy**

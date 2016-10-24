@@ -9,7 +9,7 @@ class GameAgent:
                  buffer_max_size=10000, save_name='dqn', learning_time=10000, n_observe=100000,
                  DOUBLE_NETWORK=False, PRIORITIZED_XP_REPLAY=False, DUELING_ARCHITECTURE=False, alpha=0.6, beta=0.4,
                  backup_steps=5000,
-                 learning_rate=1., debug_steps=500, train_every_steps=4, cost_measure=5000):
+                 learning_rate=1., debug_steps=500, train_every_steps=4, cost_measure=10000):
         """ Initialize agent.
             Args:
               state_dim: dimensionality of space of states
@@ -109,8 +109,8 @@ class GameAgent:
             return np.random.randint(self.action_dim)
         else:
             qs = self.online_network.get_output(state)[:self.action_dim]
-            if epsilon == 0.04:
-                print qs
+            # if epsilon == 0.04:
+            #     print qs
             return np.argmax(qs)
 
     def action(self, state, episode):
@@ -228,16 +228,17 @@ class GameAgent:
             st = time.time()
             cost, er, q, qs, erq = self.online_network.train_step(y_batch, state_batch, action_batch)
 
-        self.sum_cost += cost / self.cost_measure * self.train_every_steps
+        self.sum_cost += cost
 
         # Sometimes agent prints the cost value of batch
 
         if self.time_step % self.debug_steps == 0:
+            mn = self.time_step % self.cost_measure + int(self.time_step % self.cost_measure==0)*10000
             print "Cost for the batch:" + str(cost), self.epsilon, np.mean(output_frozen), np.mean(
-                output_frozen) - self.last_q, self.sum_cost
+                output_frozen) - self.last_q, self.sum_cost/mn * self.train_every_steps
 
             self.last_q = np.mean(output_frozen)
 
         if self.time_step % self.cost_measure == 0:
-            print 'Mean cost is ', self.sum_cost
+            print 'Mean cost is ', self.sum_cost/ self.cost_measure * self.train_every_steps
             self.sum_cost = 0

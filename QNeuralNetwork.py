@@ -108,7 +108,7 @@ class QNeuralNetwork:
 
         self.cost = Theano.T.sum(loss)
         # Initialize an optimizer
-        self.opt = RMSprop(lr=self.learning_rate, rho=0.95, epsilon=1e-6)
+        self.opt = RMSprop(lr=self.learning_rate, rho=0.95, epsilon=1e-2)
         self.params = self.model.trainable_weights
         self.updates = self.opt.get_updates(self.params, [], self.cost)
         # Make a function to update weights and get information about cost an TD-errors

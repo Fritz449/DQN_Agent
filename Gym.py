@@ -19,7 +19,7 @@ if ATARI:
 else:
     state_shape = state_dim
 agent = AI.GameAgent(state_shape, action_dim, gamma=0.99, buffer_max_size=1000000, save_name=ENV_NAME + '_simple',
-                     PRIORITIZED_XP_REPLAY=False, DOUBLE_NETWORK=False, backup_steps=10000, debug_steps=100,
+                     PRIORITIZED_XP_REPLAY=False, DOUBLE_NETWORK=False, backup_steps=10000, debug_steps=500,
                      learning_rate=0.00025, DUELING_ARCHITECTURE=False, batch_size=32, learning_time=1000000,
                      train_every_steps=4)
 EPISODES_TO_TEST = 1
@@ -52,7 +52,7 @@ for episode in xrange(GAMES_LIMIT):
     # Test every 30 episodes
     index = 0
 
-    if episode % 100 == 0 and episode > 0:
+    if episode % 100 == 0 and episode > 200:
         total_reward = 0
 
         for i in xrange(EPISODES_TO_TEST):
@@ -108,6 +108,7 @@ for episode in xrange(GAMES_LIMIT):
             action = agent.action([state], episode)
 
         next_state, reward, done, info = env.step(action)
+        total_reward += reward
         reward = np.clip(reward,-1,1)
         if ATARI:
             if index >= 30:  # Because this_buf contains last 4 frames
@@ -119,7 +120,7 @@ for episode in xrange(GAMES_LIMIT):
             agent.memorize(np.copy(state), action, float(reward), done)
         if agent.time_step % 1000 == 1:
             print agent.time_step
-        total_reward += reward
+
         state = np.copy(next_state)
         index += 1
         if done:
