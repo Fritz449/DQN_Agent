@@ -84,6 +84,10 @@ class QNeuralNetwork:
         self.q_value = Theano.function([self.state_in], self.Qs[:, :self.action_dim])
         # Get q-values for corresponding actions
         tmp = np.arange(self.batch_size)
+
+        actionmask = Theano.T.eq(Theano.T.arange(self.action_dim).reshape((1, -1)),
+                               self.actions.reshape((-1, 1))).astype(Theano.T.config.floatX)
+
         if DUELING_ARCHITECTURE:
             self.a_output = self.Qs[tmp, self.actions.reshape((self.batch_size,))]
             self.v_output = self.Qs[tmp, -1]
@@ -91,22 +95,26 @@ class QNeuralNetwork:
                                                             : self.action_dim].mean(axis=1)
 
         else:
-            self.q_output = self.Qs[tmp, self.actions.reshape((self.batch_size,))]
+            self.q_output = Theano.T.sum(self.Qs * actionmask, axis=1)
 
         # Compute TD-error
         self.error = (self.q_output - self.target.reshape((self.batch_size,)))
         # Make a MSE-cost function
-        self.error_ = (self.weights * (self.error ** 2))
-        self.cost = Theano.sum(self.error_)
-        self.cost = Theano.clip(self.cost,0,1)
+        self.error_ = self.weights * self.error
+
+        quadratic_part = Theano.T.minimum(abs(self.error_), 1.)
+        linear_part = abs(self.error_) - quadratic_part
+        loss = 0.5 * quadratic_part ** 2 + 1. * linear_part
+
+        self.cost = Theano.T.sum(loss)
         # Initialize an optimizer
-        self.opt = RMSprop(lr=self.learning_rate,rho=0.95,epsilon=1e-6)
+        self.opt = RMSprop(lr=self.learning_rate, rho=0.95, epsilon=1e-6)
         self.params = self.model.trainable_weights
         self.updates = self.opt.get_updates(self.params, [], self.cost)
         # Make a function to update weights and get information about cost an TD-errors
         self.tr_step = Theano.function(
             [self.target, self.state_in, self.actions, self.weights],  # Input
-            [self.cost, self.error,  self.q_output, self.Qs,self.error_],  # Output when make a training step
+            [self.cost, self.error, self.q_output, self.Qs,self.error_],  # Output when make a training step
             updates=self.updates)  # Update weights
 
     def get_output(self, state):

@@ -9,7 +9,7 @@ class GameAgent:
                  buffer_max_size=10000, save_name='dqn', learning_time=10000, n_observe=100000,
                  DOUBLE_NETWORK=False, PRIORITIZED_XP_REPLAY=False, DUELING_ARCHITECTURE=False, alpha=0.6, beta=0.4,
                  backup_steps=5000,
-                 learning_rate=1., debug_steps=500, train_every_steps=4):
+                 learning_rate=1., debug_steps=500, train_every_steps=4, cost_measure=5000):
         """ Initialize agent.
             Args:
               state_dim: dimensionality of space of states
@@ -44,6 +44,7 @@ class GameAgent:
         self.debug_steps = debug_steps
         self.train_every_steps = train_every_steps
         self.n_observe = n_observe
+        self.cost_measure = cost_measure
         # Create some supporting variables
         self.indexes = np.arange(self.buffer_max_size)
         self.batch_indexes = np.arange(self.batch_size)
@@ -135,13 +136,9 @@ class GameAgent:
                 os.makedirs(directory)
             self.online_network.model.save_weights(directory + 'weights.h5', True)
             np.save(directory + 'step', [self.time_step])
-            print self.frozen_network.model
             print np.sum(self.online_network.model.get_weights()[-1])
             print np.sum(self.frozen_network.model.get_weights()[-1])
             self.frozen_network.model.set_weights(np.copy(self.online_network.model.get_weights()))
-            print np.sum(self.online_network.model.get_weights()[-1])
-            print np.sum(self.frozen_network.model.get_weights()[-1])
-            print 'Networks are backed up!'
         # Add transition to experience
         self.experience_state[self.buffer_last] = np.copy(state)
         self.experience_reward[self.buffer_last] = reward
@@ -179,9 +176,11 @@ class GameAgent:
             # print indexes_batch
         else:
             # Sample transitions and avoid the last memorized transition
+
             indexes_batch = np.random.randint(0, self.buffer_size - 1, self.batch_size)
             indexes_batch = indexes_batch + (indexes_batch >= self.buffer_last).astype('int32')
         # Get batch of transitions
+
         state_batch = self.experience_state[indexes_batch]
         state_batch = np.copy(state_batch) / 255.
         action_batch = self.experience_action[indexes_batch]
@@ -229,11 +228,16 @@ class GameAgent:
             st = time.time()
             cost, er, q, qs, erq = self.online_network.train_step(y_batch, state_batch, action_batch)
 
+        self.sum_cost += cost / self.cost_measure * self.train_every_steps
 
         # Sometimes agent prints the cost value of batch
-        self.sum_cost += cost / self.debug_steps
+
         if self.time_step % self.debug_steps == 0:
             print "Cost for the batch:" + str(cost), self.epsilon, np.mean(output_frozen), np.mean(
                 output_frozen) - self.last_q, self.sum_cost
-            self.sum_cost = 0
+
             self.last_q = np.mean(output_frozen)
+
+        if self.time_step % self.cost_measure == 0:
+            print 'Mean cost is ', self.sum_cost
+            self.sum_cost = 0
