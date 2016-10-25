@@ -4,7 +4,7 @@ import time
 import Agent_DQN as AI
 import cv2
 
-ENV_NAME = 'Breakout-v0'
+ENV_NAME = 'Pong-v0'
 np.set_printoptions(threshold=np.inf)
 env = gym.make(ENV_NAME)
 

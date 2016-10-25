@@ -24,14 +24,14 @@ def random_action():
 buf = np.zeros((buffer_size, width, height))
 
 
+
 def act(action):
     global buf
-    reward = ale.act(actions[np.random.randint(len(actions))])
+    reward = ale.act(actions[action])
     screen = ale.getScreenGrayscale()
     buf = np.roll(buf, 1, axis=0)
     buf[0] = cv2.resize(screen, (width, height)).reshape((1, width, height))
     return reward, ale.game_over()
-
 
 agent = AI.GameAgent((buffer_size, width, height), len(actions), gamma=0.99, buffer_max_size=1000000,
                      save_name=game + '_simple',
@@ -75,7 +75,7 @@ for episode in xrange(GAMES_LIMIT):
     total_reward = 0.
     index = 0
     for _ in xrange(MAX_LEN):
-
+        this_b = np.copy(buf)
         if index > 30:
             action = agent.action([np.copy(buf) / 255.], episode)
         else:
@@ -84,7 +84,7 @@ for episode in xrange(GAMES_LIMIT):
         reward, done = act(action)
         total_reward += reward
         reward = np.clip(reward, -1, 1)
-        this_b = np.copy(buf)
+
         if index >= 30:  # Because this_buf contains last 4 frames
             agent.memorize(this_b, action, float(reward), done)
         if agent.time_step % 1000 == 1:
